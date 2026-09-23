@@ -94,7 +94,7 @@ Digital Lens scanner
 Website Insights
 ```
 
-Website Insights independently detects the website platform, GTM containers, Google tags, Meta, TikTok, Snapchat, LinkedIn, Clarity, Pinterest, Hotjar and other tracking signals.
+Website Insights independently detects the website platform, verifies GTM containers against Google's published `gtm.js`, ignores known placeholder IDs such as `GTM-OVERRIDE`, and detects Google tags, Meta, TikTok, Snapchat, LinkedIn, Clarity, Pinterest, Hotjar and other tracking signals.
 
 ## 4. GTM Audit
 
