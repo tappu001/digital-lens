@@ -92,6 +92,22 @@ TSD.snapshots.useStore({ get: (k) => (mem.has(k) ? mem.get(k) : null), set: (k, 
   assert.ok(h.removed.some((x) => x.type === 'Universal Analytics'), 'diff removed UA');
   assert.ok(h.changed.some((x) => x.name.includes('Purchase')), 'diff changed purchase');
 
+  // website scan: GTM-shaped placeholders must not be reported as real containers.
+  const websiteHtml = '<html><head><script src="https://www.googletagmanager.com/gtm.js?id=GTM-OVERRIDE"></script><script>var real="GTM-REAL1234";</script></head></html>';
+  const siteScan = await TSD.scan.runScan(
+    { input: 'https://example.com' },
+    async (url) => {
+      if (url === 'https://example.com/') return { status: 200, url, finalUrl: url, text: websiteHtml };
+      if (url.includes('GTM-OVERRIDE')) return { status: 404, url, finalUrl: url, text: '' };
+      if (url.includes('GTM-REAL1234')) return { status: 200, url, finalUrl: url, text: src };
+      throw new Error('Unexpected test URL: ' + url);
+    }
+  );
+  assert.deepStrictEqual(siteScan.site.gtmIds, ['GTM-REAL1234']);
+  assert.deepStrictEqual(siteScan.site.unverifiedGtmIds, ['GTM-OVERRIDE']);
+  assert.strictEqual(siteScan.errors.length, 0);
+  assert.strictEqual(siteScan.containers.length, 1);
+
   // classify
   assert.strictEqual(TSD.scan.classifyInput('GTM-ABC1234').kind, 'gtm');
   assert.strictEqual(TSD.scan.classifyInput('G-ABC1234567').kind, 'gtag');
