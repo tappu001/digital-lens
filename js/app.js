@@ -312,101 +312,33 @@
       if (!value || /^(undefined|null|true|false)$/i.test(value)) return;
       (out[name] || (out[name] = new Set())).add(value);
     };
-    const addMatches = (name, text, patterns) => {
-      const source = String(text || '');
-      patterns.forEach((re) => {
-        re.lastIndex = 0;
-        let m;
-        while ((m = re.exec(source))) add(name, m[1] || m[0]);
-      });
-    };
-    const jsonValue = (obj, keys) => {
-      if (!obj || typeof obj !== 'object') return [];
-      const vals = [];
-      const walk = (v, key) => {
-        if (v == null) return;
-        if (typeof v === 'string' || typeof v === 'number') {
-          if (keys.some((k) => key.toLowerCase() === k.toLowerCase())) vals.push(String(v));
+    const valuesForKeys = (obj, keys) => {
+      const found = [];
+      const walk = (value, key) => {
+        if (value == null) return;
+        if (typeof value === 'string' || typeof value === 'number') {
+          if (keys.includes(String(key).toLowerCase())) found.push(String(value));
           return;
         }
-        if (Array.isArray(v)) return v.forEach((x) => walk(x, key));
-        Object.entries(v).forEach(([k, x]) => walk(x, k));
+        if (Array.isArray(value)) return value.forEach((x) => walk(x, key));
+        Object.entries(value).forEach(([k, v]) => walk(v, k));
       };
       walk(obj, '');
-      return vals;
+      return found;
     };
-    const platformRules = {
-      'Meta Pixel': {
-        keys: ['pixelId', 'pixel_id', 'pixelIdOverride', 'facebookPixelId', 'facebook_pixel_id'],
-        patterns: [
-          /fbq\\(\\s*['"]init['"]\\s*,\\s*['"]([0-9]{10,20})['"]/gi,
-          /(?:pixel[_ -]?id|facebook[_ -]?pixel[_ -]?id)[^0-9]{0,20}([0-9]{10,20})/gi
-        ]
-      },
-      'TikTok Pixel': {
-        keys: ['pixelCode', 'pixel_code', 'pixelId', 'pixel_id', 'tiktokPixelId'],
-        patterns: [
-          /ttq\\.load\\(\\s*['"]([A-Za-z0-9_-]{8,40})['"]/gi,
-          /(?:pixel[_ -]?(?:code|id)|tiktok[_ -]?pixel[_ -]?id)[^A-Za-z0-9_-]{0,20}([A-Za-z0-9_-]{8,40})/gi
-        ]
-      },
-      'Snapchat Pixel': {
-        keys: ['pixelId', 'pixel_id', 'snapPixelId', 'snapchatPixelId'],
-        patterns: [
-          /snaptr\\(\\s*['"]init['"]\\s*,\\s*['"]([^'"]+)['"]/gi,
-          /(?:pixel[_ -]?id|snap(?:chat)?[_ -]?pixel[_ -]?id)[^A-Za-z0-9-]{0,20}([A-Za-z0-9-]{8,80})/gi
-        ]
-      },
-      'Pinterest Tag': {
-        keys: ['tagId', 'tag_id', 'pixelId', 'pixel_id', 'pinterestTagId'],
-        patterns: [
-          /pintrk\\(\\s*['"]load['"]\\s*,\\s*['"]([0-9]{6,20})['"]/gi,
-          /(?:tag[_ -]?id|pixel[_ -]?id|pinterest[_ -]?tag[_ -]?id)[^0-9]{0,20}([0-9]{6,20})/gi
-        ]
-      },
-      'LinkedIn Insight': {
-        keys: ['partnerId', 'partner_id', 'conversionId', 'conversion_id', 'linkedinPartnerId'],
-        patterns: [
-          /_linkedin_partner_id\\s*=\\s*['"]?([0-9]{4,20})/gi,
-          /(?:partner[_ -]?id|linkedin[_ -]?partner[_ -]?id)[^0-9]{0,20}([0-9]{4,20})/gi,
-          /conversion[_ -]?id[^0-9]{0,20}([0-9]{4,20})/gi
-        ]
-      },
-      'Microsoft UET': {
-        keys: ['tagId', 'tag_id', 'uetTagId', 'uet_tag_id'],
-        patterns: [
-          /(?:uetq|uet)[^\\n]{0,120}['"]([A-Za-z0-9-]{6,40})['"]/gi,
-          /(?:tag[_ -]?id|uet[_ -]?tag[_ -]?id)[^A-Za-z0-9-]{0,20}([A-Za-z0-9-]{6,40})/gi
-        ]
-      },
-      'Microsoft Clarity': {
-        keys: ['projectId', 'project_id', 'clarityId', 'clarity_id'],
-        patterns: [
-          /clarity\\(\\s*['"][^'"]+['"]\\s*,\\s*['"]([A-Za-z0-9_-]{6,40})['"]/gi,
-          /clarity[_ -]?(?:project[_ -]?)?id[^A-Za-z0-9_-]{0,20}([A-Za-z0-9_-]{6,40})/gi
-        ]
-      },
-      'Hotjar': {
-        keys: ['siteId', 'site_id', 'hotjarId', 'hjid'],
-        patterns: [
-          /(?:hjid|hotjar[_ -]?(?:site[_ -]?)?id)[^0-9]{0,20}([0-9]{4,12})/gi
-        ]
-      },
-      'MoEngage': {
-        keys: ['appId', 'app_id', 'appIdOverride', 'moeAppId', 'workspaceId', 'workspace_id'],
-        patterns: [
-          /(?:moe[_ -]?app[_ -]?id|moengage[_ -]?(?:app[_ -]?)?id|app[_ -]?id)[^A-Za-z0-9_-]{0,20}([A-Za-z0-9_-]{6,40})/gi
-        ]
-      },
-      'Klaviyo': {
-        keys: ['publicApiKey', 'siteId', 'companyId', 'klaviyoId'],
-        patterns: [
-          /(?:klaviyo[_ -]?(?:public[_ -]?api[_ -]?key|site[_ -]?id)|public[_ -]?api[_ -]?key)[^A-Za-z0-9_-]{0,20}([A-Za-z0-9_-]{8,60})/gi
-        ]
-      }
+    const rules = {
+      'Meta Pixel': { keys: ['pixelid', 'pixel_id', 'facebookpixelid', 'facebook_pixel_id'], re: /fbq\s*\(\s*['"]init['"]\s*,\s*['"]([0-9]{10,20})['"]/gi },
+      'TikTok Pixel': { keys: ['pixelcode', 'pixel_code', 'pixelid', 'pixel_id', 'tiktokpixelid'], re: /ttq\.load\s*\(\s*['"]([A-Za-z0-9_-]{8,40})['"]/gi },
+      'Snapchat Pixel': { keys: ['pixelid', 'pixel_id', 'snappixelid', 'snapchatpixelid'], re: /snaptr\s*\(\s*['"]init['"]\s*,\s*['"]([^'"]{8,80})['"]/gi },
+      'Pinterest Tag': { keys: ['tagid', 'tag_id', 'pixelid', 'pixel_id', 'pinteresttagid'], re: /pintrk\s*\(\s*['"]load['"]\s*,\s*['"]?([0-9]{6,20})/gi },
+      'LinkedIn Insight': { keys: ['partnerid', 'partner_id', 'conversionid', 'conversion_id', 'linkedinpartnerid'], re: /_linkedin_partner_id\s*=\s*['"]?([0-9]{4,20})/gi },
+      'Microsoft UET': { keys: ['tagid', 'tag_id', 'uettagid', 'uet_tag_id'], re: /(?:tag[_ -]?id|uet[_ -]?tag[_ -]?id)\s*[:=]\s*['"]?([A-Za-z0-9-]{6,40})/gi },
+      'Microsoft Clarity': { keys: ['projectid', 'project_id', 'clarityid', 'clarity_id'], re: /clarity[_ -]?(?:project[_ -]?)?id\s*[:=]\s*['"]?([A-Za-z0-9_-]{6,40})/gi },
+      'Hotjar': { keys: ['siteid', 'site_id', 'hotjarid', 'hjid'], re: /(?:hjid|hotjar[_ -]?(?:site[_ -]?)?id)\s*[:=]\s*([0-9]{4,12})/gi },
+      'MoEngage': { keys: ['appid', 'app_id', 'moeappid', 'workspaceid', 'workspace_id'], re: /(?:moe[_ -]?app[_ -]?id|moengage[_ -]?(?:app[_ -]?)?id)\s*[:=]\s*['"]?([A-Za-z0-9_-]{6,40})/gi },
+      'Klaviyo': { keys: ['publicapikey', 'siteid', 'companyid', 'klaviyoid'], re: /(?:klaviyo[_ -]?(?:public[_ -]?api[_ -]?key|site[_ -]?id)|public[_ -]?api[_ -]?key)\s*[:=]\s*['"]?([A-Za-z0-9_-]{8,60})/gi }
     };
     const aliases = {
-      'Google Analytics 4 / Google tag': 'GA4',
       'Google Analytics 4 / Google tag': 'GA4',
       'Google Ads Conversion Tracking': 'Google Ads',
       'Google Ads Remarketing': 'Google Ads',
@@ -415,42 +347,38 @@
       'Microsoft Advertising UET': 'Microsoft UET',
       'X (Twitter) Base Pixel': 'X (Twitter) Pixel'
     };
-
     (containers || []).forEach((c) => {
-      (c.summary && c.summary.ga4Ids || []).forEach((id) => add('GA4', id));
-      (c.summary && c.summary.adsIds || []).forEach((id) => add('Google Ads', id));
+      (c.summary?.ga4Ids || []).forEach((id) => add('GA4', id));
+      (c.summary?.adsIds || []).forEach((id) => add('Google Ads', id));
       (c.tags || []).forEach((t) => {
-        const rawText = String(t.html || '') + ' ' + JSON.stringify(t.paramsObj || {}) + ' ' + JSON.stringify(t.raw || '');
-        const platforms = t.platforms || [];
-
-        platforms.forEach((rawName) => {
-          const name = aliases[rawName] || rawName;
-          const rule = platformRules[name];
+        const raw = JSON.stringify(t.raw || {}) + ' ' + JSON.stringify(t.paramsObj || {}) + ' ' + String(t.html || '');
+        (t.platforms || []).forEach((platform) => {
+          const name = aliases[platform] || platform;
+          const rule = rules[name];
           if (!rule) return;
-          jsonValue(t.paramsObj, rule.keys).forEach((id) => add(name, id));
-          addMatches(name, rawText, rule.patterns);
+          valuesForKeys(t.paramsObj, rule.keys).forEach((id) => add(name, id));
+          rule.re.lastIndex = 0;
+          let m;
+          while ((m = rule.re.exec(raw))) add(name, m[1]);
         });
-
-        // Built-in GTM tag IDs and destination IDs.
-        const raw = t.raw || {};
+        const r = t.raw || {};
         ['tagId', 'measurementId', 'measurementIdOverride'].forEach((key) => {
-          const v = raw['vtp_' + key];
-          if (typeof v === 'string') {
-            if (/^G-/i.test(v)) add('GA4', v.toUpperCase());
-            if (/^AW-/i.test(v)) add('Google Ads', v.toUpperCase());
+          const value = r['vtp_' + key];
+          if (typeof value === 'string') {
+            if (/^G-/i.test(value)) add('GA4', value.toUpperCase());
+            if (/^AW-/i.test(value)) add('Google Ads', value.toUpperCase());
           }
         });
-        const conversionId = raw.vtp_conversionId;
-        if ((t.fn === '__awct' || t.fn === '__sp') && conversionId != null) {
-          const v = String(conversionId);
-          add('Google Ads', /^AW-/i.test(v) ? v.toUpperCase() : 'AW-' + v);
+        if (t.fn === '__awct' || t.fn === '__sp') {
+          const value = r.vtp_conversionId;
+          if (typeof value === 'string' || typeof value === 'number') {
+            const id = String(value);
+            add('Google Ads', /^AW-/i.test(id) ? id.toUpperCase() : 'AW-' + id);
+          }
         }
       });
     });
-
-    return Object.fromEntries(Object.entries(out)
-      .map(([k, v]) => [k, [...v].filter((id) => id.length <= 100).slice(0, 10)])
-      .filter(([, ids]) => ids.length));
+    return Object.fromEntries(Object.entries(out).map(([name, ids]) => [name, [...ids].slice(0, 10)]));
   }
 
   function siteCard(site, containers) {
