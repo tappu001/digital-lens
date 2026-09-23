@@ -1,6 +1,6 @@
 {
   "name": "digital-lens",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Digital Lens tracking intelligence workspace: independent GTM, GA4 property and website insights modules.",
   "scripts": {
     "start": "node server.js",
