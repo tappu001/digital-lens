@@ -307,26 +307,150 @@
   function collectGtmPlatformIds(containers) {
     const out = {};
     const add = (name, id) => {
-      if (!id) return;
-      (out[name] || (out[name] = new Set())).add(String(id).trim());
+      if (id == null) return;
+      const value = String(id).trim();
+      if (!value || /^(undefined|null|true|false)$/i.test(value)) return;
+      (out[name] || (out[name] = new Set())).add(value);
     };
+    const addMatches = (name, text, patterns) => {
+      const source = String(text || '');
+      patterns.forEach((re) => {
+        re.lastIndex = 0;
+        let m;
+        while ((m = re.exec(source))) add(name, m[1] || m[0]);
+      });
+    };
+    const jsonValue = (obj, keys) => {
+      if (!obj || typeof obj !== 'object') return [];
+      const vals = [];
+      const walk = (v, key) => {
+        if (v == null) return;
+        if (typeof v === 'string' || typeof v === 'number') {
+          if (keys.some((k) => key.toLowerCase() === k.toLowerCase())) vals.push(String(v));
+          return;
+        }
+        if (Array.isArray(v)) return v.forEach((x) => walk(x, key));
+        Object.entries(v).forEach(([k, x]) => walk(x, k));
+      };
+      walk(obj, '');
+      return vals;
+    };
+    const platformRules = {
+      'Meta Pixel': {
+        keys: ['pixelId', 'pixel_id', 'pixelIdOverride', 'facebookPixelId', 'facebook_pixel_id'],
+        patterns: [
+          /fbq\\(\\s*['"]init['"]\\s*,\\s*['"]([0-9]{10,20})['"]/gi,
+          /(?:pixel[_ -]?id|facebook[_ -]?pixel[_ -]?id)[^0-9]{0,20}([0-9]{10,20})/gi
+        ]
+      },
+      'TikTok Pixel': {
+        keys: ['pixelCode', 'pixel_code', 'pixelId', 'pixel_id', 'tiktokPixelId'],
+        patterns: [
+          /ttq\\.load\\(\\s*['"]([A-Za-z0-9_-]{8,40})['"]/gi,
+          /(?:pixel[_ -]?(?:code|id)|tiktok[_ -]?pixel[_ -]?id)[^A-Za-z0-9_-]{0,20}([A-Za-z0-9_-]{8,40})/gi
+        ]
+      },
+      'Snapchat Pixel': {
+        keys: ['pixelId', 'pixel_id', 'snapPixelId', 'snapchatPixelId'],
+        patterns: [
+          /snaptr\\(\\s*['"]init['"]\\s*,\\s*['"]([^'"]+)['"]/gi,
+          /(?:pixel[_ -]?id|snap(?:chat)?[_ -]?pixel[_ -]?id)[^A-Za-z0-9-]{0,20}([A-Za-z0-9-]{8,80})/gi
+        ]
+      },
+      'Pinterest Tag': {
+        keys: ['tagId', 'tag_id', 'pixelId', 'pixel_id', 'pinterestTagId'],
+        patterns: [
+          /pintrk\\(\\s*['"]load['"]\\s*,\\s*['"]([0-9]{6,20})['"]/gi,
+          /(?:tag[_ -]?id|pixel[_ -]?id|pinterest[_ -]?tag[_ -]?id)[^0-9]{0,20}([0-9]{6,20})/gi
+        ]
+      },
+      'LinkedIn Insight': {
+        keys: ['partnerId', 'partner_id', 'conversionId', 'conversion_id', 'linkedinPartnerId'],
+        patterns: [
+          /_linkedin_partner_id\\s*=\\s*['"]?([0-9]{4,20})/gi,
+          /(?:partner[_ -]?id|linkedin[_ -]?partner[_ -]?id)[^0-9]{0,20}([0-9]{4,20})/gi,
+          /conversion[_ -]?id[^0-9]{0,20}([0-9]{4,20})/gi
+        ]
+      },
+      'Microsoft UET': {
+        keys: ['tagId', 'tag_id', 'uetTagId', 'uet_tag_id'],
+        patterns: [
+          /(?:uetq|uet)[^\\n]{0,120}['"]([A-Za-z0-9-]{6,40})['"]/gi,
+          /(?:tag[_ -]?id|uet[_ -]?tag[_ -]?id)[^A-Za-z0-9-]{0,20}([A-Za-z0-9-]{6,40})/gi
+        ]
+      },
+      'Microsoft Clarity': {
+        keys: ['projectId', 'project_id', 'clarityId', 'clarity_id'],
+        patterns: [
+          /clarity\\(\\s*['"][^'"]+['"]\\s*,\\s*['"]([A-Za-z0-9_-]{6,40})['"]/gi,
+          /clarity[_ -]?(?:project[_ -]?)?id[^A-Za-z0-9_-]{0,20}([A-Za-z0-9_-]{6,40})/gi
+        ]
+      },
+      'Hotjar': {
+        keys: ['siteId', 'site_id', 'hotjarId', 'hjid'],
+        patterns: [
+          /(?:hjid|hotjar[_ -]?(?:site[_ -]?)?id)[^0-9]{0,20}([0-9]{4,12})/gi
+        ]
+      },
+      'MoEngage': {
+        keys: ['appId', 'app_id', 'appIdOverride', 'moeAppId', 'workspaceId', 'workspace_id'],
+        patterns: [
+          /(?:moe[_ -]?app[_ -]?id|moengage[_ -]?(?:app[_ -]?)?id|app[_ -]?id)[^A-Za-z0-9_-]{0,20}([A-Za-z0-9_-]{6,40})/gi
+        ]
+      },
+      'Klaviyo': {
+        keys: ['publicApiKey', 'siteId', 'companyId', 'klaviyoId'],
+        patterns: [
+          /(?:klaviyo[_ -]?(?:public[_ -]?api[_ -]?key|site[_ -]?id)|public[_ -]?api[_ -]?key)[^A-Za-z0-9_-]{0,20}([A-Za-z0-9_-]{8,60})/gi
+        ]
+      }
+    };
+    const aliases = {
+      'Google Analytics 4 / Google tag': 'GA4',
+      'Google Analytics 4 / Google tag': 'GA4',
+      'Google Ads Conversion Tracking': 'Google Ads',
+      'Google Ads Remarketing': 'Google Ads',
+      'Google Ads Calls from Website': 'Google Ads',
+      'Google Ads User-Provided Data Event': 'Google Ads',
+      'Microsoft Advertising UET': 'Microsoft UET',
+      'X (Twitter) Base Pixel': 'X (Twitter) Pixel'
+    };
+
     (containers || []).forEach((c) => {
       (c.summary && c.summary.ga4Ids || []).forEach((id) => add('GA4', id));
       (c.summary && c.summary.adsIds || []).forEach((id) => add('Google Ads', id));
       (c.tags || []).forEach((t) => {
+        const rawText = String(t.html || '') + ' ' + JSON.stringify(t.paramsObj || {}) + ' ' + JSON.stringify(t.raw || '');
         const platforms = t.platforms || [];
-        const text = JSON.stringify(t.paramsObj || {}) + ' ' + String(t.html || '');
-        platforms.forEach((name) => {
-          if (name === 'Meta Pixel') [...text.matchAll(/\b\d{10,20}\b/g)].forEach((m) => add(name, m[0]));
-          if (name === 'TikTok Pixel') [...text.matchAll(/\b[A-Z0-9]{15,25}\b/g)].forEach((m) => add(name, m[0]));
-          if (name === 'Snapchat Pixel') [...text.matchAll(/\b[a-f0-9]{8,}(?:-[a-f0-9]{4,}){1,}\b/gi)].forEach((m) => add(name, m[0]));
-          if (name === 'LinkedIn Insight') [...text.matchAll(/\b\d{4,20}\b/g)].forEach((m) => add(name, m[0]));
-          if (name === 'Pinterest Tag') [...text.matchAll(/\b\d{8,20}\b/g)].forEach((m) => add(name, m[0]));
-          if (name === 'Microsoft UET') [...text.matchAll(/\b[A-Z0-9-]{6,30}\b/g)].forEach((m) => add(name, m[0]));
+
+        platforms.forEach((rawName) => {
+          const name = aliases[rawName] || rawName;
+          const rule = platformRules[name];
+          if (!rule) return;
+          jsonValue(t.paramsObj, rule.keys).forEach((id) => add(name, id));
+          addMatches(name, rawText, rule.patterns);
         });
+
+        // Built-in GTM tag IDs and destination IDs.
+        const raw = t.raw || {};
+        ['tagId', 'measurementId', 'measurementIdOverride'].forEach((key) => {
+          const v = raw['vtp_' + key];
+          if (typeof v === 'string') {
+            if (/^G-/i.test(v)) add('GA4', v.toUpperCase());
+            if (/^AW-/i.test(v)) add('Google Ads', v.toUpperCase());
+          }
+        });
+        const conversionId = raw.vtp_conversionId;
+        if ((t.fn === '__awct' || t.fn === '__sp') && conversionId != null) {
+          const v = String(conversionId);
+          add('Google Ads', /^AW-/i.test(v) ? v.toUpperCase() : 'AW-' + v);
+        }
       });
     });
-    return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, [...v].slice(0, 10)]));
+
+    return Object.fromEntries(Object.entries(out)
+      .map(([k, v]) => [k, [...v].filter((id) => id.length <= 100).slice(0, 10)])
+      .filter(([, ids]) => ids.length));
   }
 
   function siteCard(site, containers) {
