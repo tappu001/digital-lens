@@ -60,7 +60,8 @@ Give Digital Lens a public website URL. The website scanner uses the configured 
 
 - Website/CMS platform
 - GTM containers, verified against Google's published gtm.js response
-- GTM-like references that could not be verified, shown as evidence rather than real containers
+- GTM-like references that could not be verified, excluded from the verified container list
+- Known CMS placeholder IDs (for example `GTM-OVERRIDE`) ignored before any Google container request
 - Google tag / GA4 / Google Ads IDs
 - Meta Pixel
 - TikTok Pixel
