@@ -1,7 +1,7 @@
 {
   "name": "digital-lens",
-  "version": "3.0.1",
-  "description": "Digital Lens tracking intelligence workspace: independent GTM, GA4 property and website insights modules.",
+  "version": "3.1.0",
+  "description": "Digital Lens tracking intelligence workspace with independent GTM, GA4 property, and website technology audits.",
   "scripts": {
     "start": "node server.js",
     "test": "node --check js/app.js && node --check js/core/catalog.js && node --check js/core/parser.js && node --check js/core/naming.js && node --check js/core/decoder.js && node --check js/core/audit.js && node --check js/core/sitescan.js && node --check js/core/snapshots.js && node --check js/core/ga4.js && node --check js/core/scan.js && node --check js/settings.js && node --check js/net.js && node --check js/icons.js && node --check js/analytics.js && node test/make-fixture.js && node test/run.js"
