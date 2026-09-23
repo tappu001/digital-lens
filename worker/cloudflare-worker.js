@@ -42,7 +42,17 @@ function json(body, origin, status = 200) {
 export default {
   async fetch(request, env) {
     const origin = request.headers.get('Origin') || '';
-    const allowed = String(env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean);
+    const configuredOrigins = String(env.ALLOWED_ORIGINS || '')
+      .split(',')
+      .map((s) => s.trim().replace(/\/+$/, ''))
+      .filter(Boolean);
+
+    // Keep the production Worker usable after a fresh deployment even if the
+    // dashboard variable has not been recreated yet. An explicit variable
+    // always overrides this safe default.
+    const allowed = configuredOrigins.length
+      ? configuredOrigins
+      : ['https://tappu001.github.io'];
     const originOk = !origin || allowed.includes(origin);
 
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders(originOk ? origin : '') });
