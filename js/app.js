@@ -322,10 +322,13 @@
       ? site.gtmIds.map(id => `<span style="margin-right:16px"><b style="font-family:monospace;font-size:13px">${esc(id)}</b> ${loadLabel(loadTimes[id])}</span>`).join('')
       : '<span class="none">No GTM found</span>';
     const notes = [...(site.notes || [])];
+    if (site.unverifiedGtmIds && site.unverifiedGtmIds.length) {
+      notes.unshift(`GTM-like references not verified by Google: ${site.unverifiedGtmIds.join(', ')}`);
+    }
     return `<div class="card" style="margin-bottom:16px"><div class="card-head"><h2>Website Insights</h2><span class="muted small">${esc(site.url)}</span></div><div class="card-body">
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px 28px;margin-bottom:16px">
         <div><div class="muted small" style="margin-bottom:4px">Built with</div><div style="font-weight:500">${esc(site.sitePlatform || 'Unknown')}</div></div>
-        <div><div class="muted small" style="margin-bottom:4px">GTM containers</div><div>${site.gtmIds.length ? site.gtmIds.map(id => chip2(id)).join(' ') : '<span class="none">None</span>'}</div></div>
+        <div><div class="muted small" style="margin-bottom:4px">Verified GTM containers</div><div>${site.gtmIds.length ? site.gtmIds.map(id => chip2(id, 'published')).join(' ') : '<span class="none">None verified</span>'}</div></div>
         <div><div class="muted small" style="margin-bottom:4px">GTM load time</div><div>${loadHtml}</div></div>
       </div>
       <div style="border-top:1px solid var(--line-2,#e0e0e0);padding-top:14px;margin-bottom:12px">
