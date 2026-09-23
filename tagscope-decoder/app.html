@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- Google Tag Manager -->
+  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+  new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+  })(window,document,'script','dataLayer','GTM-WR8MNJG8');</script>
+  <!-- End Google Tag Manager -->
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Digital Lens™ — Tracking Intelligence</title>
+  <meta name="author" content="Tapasvi Dudhrejiya">
+  <meta name="description" content="Decode any published Google Tag Manager container into readable tags, triggers, and variables, with audit findings.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/styles.css">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <!-- Google Tag Manager (noscript) -->
+  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-WR8MNJG8"
+    height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+  <!-- End Google Tag Manager (noscript) -->
+  <header class="appbar">
+    <a class="brand" href="./" aria-label="Digital Lens™ home">
+      <img src="favicon.svg" alt="" width="28" height="28">
+      <span class="brand-text">
+        <span class="brand-name">Digital Lens™</span>
+        <span class="brand-by">by Tapasvi Dudhrejiya</span>
+      </span>
+    </a>
+    <form id="decodeForm" class="searchbar" autocomplete="off" role="search">
+      <label for="q" class="sr-only">Audit input</label>
+      <svg class="searchbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.8l-.3-.3A6.5 6.5 0 1 0 9.5 16a6.5 6.5 0 0 0 4.2-1.6l.3.3v.8l5 5 1.5-1.5-5-5Zm-6 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9Z"/></svg>
+      <input id="q" type="text" spellcheck="false" placeholder="GTM-XXXXXXX or a published GTM script URL">
+      <button type="submit" id="decodeBtn" class="btn-primary">Decode</button>
+    </form>
+    <div class="appbar-actions">
+      <button type="button" id="backendChip" class="backend-chip" title="How this app fetches gtm.js">
+        <span class="dot"></span><span class="label">Checking…</span>
+      </button>
+      <button type="button" class="icon-btn" id="pasteBtn" title="Paste gtm.js source" aria-label="Paste gtm.js source"></button>
+      <button type="button" class="icon-btn" id="settingsBtn" title="Settings" aria-label="Settings"></button>
+    </div>
+    <div class="progress" id="progress" hidden><span></span></div>
+  </header>
+
+  <div class="modebar" id="modebar" aria-label="Audit modes">
+    <button type="button" class="mode-tab active" data-mode="home"><span>⌂</span>Workspace</button>
+    <button type="button" class="mode-tab" data-mode="gtm"><span>◈</span>GTM Audit</button>
+    <button type="button" class="mode-tab" data-mode="ga4"><span>◉</span>GA4 Audit</button>
+    <button type="button" class="mode-tab" data-mode="website"><span>◌</span>Website Insights</button>
+  </div>
+
+  <div class="layout">
+    <nav class="sidenav" id="sidenav" aria-label="Container sections"></nav>
+    <main class="main" id="main">
+      <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+      <div id="view"></div>
+    </main>
+  </div>
+
+  <div class="scrim" id="scrim" hidden></div>
+  <aside class="sheet" id="sheet" aria-modal="true" role="dialog" aria-labelledby="sheetTitle" hidden></aside>
+
+  <dialog id="pasteDialog" class="dialog">
+    <form method="dialog" class="dialog-body" id="pasteForm">
+      <h2>Paste gtm.js source</h2>
+      <p class="muted">In Chrome DevTools, open the Network tab, filter by <code>gtm.js</code>, click the request, open Response, select all, and copy. This works without any proxy.</p>
+      <textarea id="pasteText" spellcheck="false" placeholder="Paste the full gtm.js response here"></textarea>
+      <div class="dialog-row">
+        <label class="file-label">Or load a file <input type="file" id="pasteFile" accept=".js,.txt"></label>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="btn-text" data-close>Cancel</button>
+        <button type="submit" class="btn-primary" id="pasteGo">Decode source</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="settingsDialog" class="dialog">
+    <form method="dialog" class="dialog-body" id="settingsForm">
+      <h2>Settings</h2>
+
+      <fieldset class="field">
+        <legend>Naming style</legend>
+        <p class="muted small">GTM doesn't publish real names, so names are built from each item's settings.</p>
+        <label class="radio"><input type="radio" name="style" value="readable"> <span><b>Plain English</b><br><span class="muted small">Meta Pixel · Purchase, Page view · URL contains /thank-you</span></span></label>
+        <label class="radio"><input type="radio" name="style" value="emdash"> <span><b>Em-dash (GTM Spy style)</b><br><span class="muted small">Meta Pixel — Purchase, Page View — Page Path contains /thank-you</span></span></label>
+        <label class="radio"><input type="radio" name="style" value="convention"> <span><b>Convention</b><br><span class="muted small">Meta - cHTML - Purchase, PV - Page Path contains /thank-you</span></span></label>
+      </fieldset>
+
+      <fieldset class="field">
+        <legend>Fetch proxy</legend>
+        <p class="muted small">Needed on the hosted version so the browser can read gtm.js. Paste your Cloudflare Worker URL (see DEPLOY.md). Leave empty when using the local server.</p>
+        <div class="inline">
+          <input type="url" id="proxyUrl" placeholder="https://your-worker.your-subdomain.workers.dev">
+          <button type="button" class="btn-outline" id="testProxy">Test</button>
+        </div>
+        <p class="small" id="proxyResult"></p>
+      </fieldset>
+
+      <fieldset class="field">
+        <legend>GA4 connection</legend>
+        <p class="muted small">The GA4 audit uses a Google OAuth Web Client ID. Only the public client ID belongs in this app; never add a client secret.</p>
+        <input type="text" id="ga4ClientIdSetting" placeholder="1234567890-xxxxxxxx.apps.googleusercontent.com">
+      </fieldset>
+
+      <fieldset class="field">
+        <legend>Display</legend>
+        <label class="check"><input type="checkbox" id="showListeners"> Show GTM listener tags and listener-only triggers</label>
+      </fieldset>
+
+      <fieldset class="field">
+        <legend>Saved data</legend>
+        <p class="muted small">Version snapshots and recent searches stay in this browser only.</p>
+        <button type="button" class="btn-outline" id="clearSnaps">Clear saved snapshots</button>
+      </fieldset>
+
+      <div class="dialog-actions">
+        <button type="button" class="btn-text" data-close>Cancel</button>
+        <button type="submit" class="btn-primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="report" class="report" aria-hidden="true"></div>
+
+  <footer class="site-footer">
+    <span>Digital Lens™ — built by <strong>Tapasvi Dudhrejiya</strong></span>
+    <span class="foot-links">
+      <a href="mailto:dudhrejiyatapasvi@gmail.com">dudhrejiyatapasvi@gmail.com</a>
+      <span class="foot-sep">·</span>
+      <a href="https://www.linkedin.com/in/tapasvi-dudhrejiya/" target="_blank" rel="noopener">LinkedIn</a>
+    </span>
+  </footer>
+
+  <script src="js/config.js"></script>
+  <script src="js/core/catalog.js"></script>
+  <script src="js/core/parser.js"></script>
+  <script src="js/core/naming.js"></script>
+  <script src="js/core/decoder.js"></script>
+  <script src="js/core/audit.js"></script>
+  <script src="js/core/sitescan.js"></script>
+  <script src="js/core/snapshots.js"></script>
+  <script src="js/core/ga4.js"></script>
+  <script src="js/core/scan.js"></script>
+  <script src="js/settings.js"></script>
+  <script src="js/net.js"></script>
+  <script src="js/icons.js"></script>
+  <script src="js/analytics.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

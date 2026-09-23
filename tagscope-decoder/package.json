@@ -1,0 +1,15 @@
+{
+  "name": "digital-lens",
+  "version": "3.0.0",
+  "description": "Digital Lens tracking intelligence workspace: independent GTM, GA4 property and website insights modules.",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/make-fixture.js && node test/run.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "author": "Tapasvi Dudhrejiya <dudhrejiyatapasvi@gmail.com> (https://www.linkedin.com/in/tapasvi-dudhrejiya/)",
+  "license": "UNLICENSED",
+  "private": true
+}
