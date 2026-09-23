@@ -184,6 +184,18 @@ table.grid { width: 100%; border-collapse: collapse; }
 .chip.tagref { padding: 2px 10px 2px 3px; }
 .none { color: var(--text-3); font-size: 12.5px; }
 
+/* ---------- integration inventory ---------- */
+.integration-group { margin: 0 0 16px; }
+.integration-group:last-child { margin-bottom: 0; }
+.integration-group-title { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-2); font-weight: 700; margin-bottom: 7px; }
+.integration-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px; }
+.integration-item { border: 1px solid var(--line-2); border-radius: 7px; padding: 10px 12px; background: var(--surface); }
+.integration-name { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.integration-name b { font-weight: 500; }
+.integration-evidence { font-size: 11px; color: var(--text-3); text-align: right; }
+.integration-ids { margin-top: 5px; min-height: 18px; }
+.integration-ids code { display: inline-block; margin: 2px 4px 0 0; padding: 2px 5px; border-radius: 4px; background: var(--grey-tint); color: var(--text-2); overflow-wrap: anywhere; }
+
 /* ---------- overview ---------- */
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 16px; margin-bottom: 16px; }
 .tile { background: var(--surface); border-radius: 8px; box-shadow: var(--shadow-1); padding: 16px 18px; text-align: left; border: 0; cursor: pointer; }
