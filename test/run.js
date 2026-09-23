@@ -115,6 +115,18 @@ TSD.snapshots.useStore({ get: (k) => (mem.has(k) ? mem.get(k) : null), set: (k, 
   assert.strictEqual(siteScan.errors.length, 0);
   assert.strictEqual(siteScan.containers.length, 1);
 
+  // website integration inventory: detect platforms and exposed public IDs.
+  const integrationHtml = '<script src="https://www.googletagmanager.com/gtag/js?id=G-ABC1234567"></script>' +
+    '<script>fbq("init", "123456789012345"); ttq.load("ABCDEFGHIJKLMNOP"); _linkedin_partner_id = "123456";</script>' +
+    '<script src="https://static.hotjar.com/c/hotjar-123456.js"></script>';
+  const integrations = TSD.sitescan.detectIntegrations(integrationHtml);
+  const byName = Object.fromEntries(integrations.map((x) => [x.name, x]));
+  assert.ok(byName.GA4 && byName.GA4.ids.includes('G-ABC1234567'));
+  assert.ok(byName['Meta Pixel']);
+  assert.ok(byName['TikTok Pixel']);
+  assert.ok(byName['LinkedIn Insight']);
+  assert.ok(byName.Hotjar);
+
   // classify
   assert.strictEqual(TSD.scan.classifyInput('GTM-ABC1234').kind, 'gtm');
   assert.strictEqual(TSD.scan.classifyInput('G-ABC1234567').kind, 'gtag');
