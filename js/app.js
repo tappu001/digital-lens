@@ -304,6 +304,31 @@
     const q=$('#websiteQuick'); const qb=$('#websiteQuickBtn'); if(qb)qb.addEventListener('click',()=>{const v=q.value.trim();if(v){setMode('website');decode({input:v});}});
   }
 
+  function collectGtmPlatformIds(containers) {
+    const out = {};
+    const add = (name, id) => {
+      if (!id) return;
+      (out[name] || (out[name] = new Set())).add(String(id).trim());
+    };
+    (containers || []).forEach((c) => {
+      (c.summary && c.summary.ga4Ids || []).forEach((id) => add('GA4', id));
+      (c.summary && c.summary.adsIds || []).forEach((id) => add('Google Ads', id));
+      (c.tags || []).forEach((t) => {
+        const platforms = t.platforms || [];
+        const text = JSON.stringify(t.paramsObj || {}) + ' ' + String(t.html || '');
+        platforms.forEach((name) => {
+          if (name === 'Meta Pixel') [...text.matchAll(/\b\d{10,20}\b/g)].forEach((m) => add(name, m[0]));
+          if (name === 'TikTok Pixel') [...text.matchAll(/\b[A-Z0-9]{15,25}\b/g)].forEach((m) => add(name, m[0]));
+          if (name === 'Snapchat Pixel') [...text.matchAll(/\b[a-f0-9]{8,}(?:-[a-f0-9]{4,}){1,}\b/gi)].forEach((m) => add(name, m[0]));
+          if (name === 'LinkedIn Insight') [...text.matchAll(/\b\d{4,20}\b/g)].forEach((m) => add(name, m[0]));
+          if (name === 'Pinterest Tag') [...text.matchAll(/\b\d{8,20}\b/g)].forEach((m) => add(name, m[0]));
+          if (name === 'Microsoft UET') [...text.matchAll(/\b[A-Z0-9-]{6,30}\b/g)].forEach((m) => add(name, m[0]));
+        });
+      });
+    });
+    return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, [...v].slice(0, 10)]));
+  }
+
   function siteCard(site, containers) {
     const loadLabel = (ms) => ms == null ? '<span class="muted">—</span>' : ms < 300 ? `<span style="color:var(--green,#1e8e3e)">${ms}ms ✓</span>` : ms < 800 ? `<span style="color:var(--amber,#b06000)">${ms}ms</span>` : `<span style="color:var(--red,#c5221f)">${ms}ms ⚠</span>`;
     const chip2 = (txt, sub) => `<span class="chip plain" style="font-size:12px;padding:3px 10px">${esc(txt)}${sub ? `<span style="color:var(--text-3);margin-left:6px;font-weight:400">${esc(sub)}</span>` : ''}</span>`;
@@ -322,8 +347,12 @@
       : '<span class="none">None detected</span>';
     const gtmPlatforms = {};
     (containers || []).forEach(c => { (c.summary.platforms || []).forEach(p => { gtmPlatforms[p.name] = (gtmPlatforms[p.name] || 0) + p.count; }); });
+    const gtmIds = collectGtmPlatformIds(containers);
     const gtmPlatHtml = Object.keys(gtmPlatforms).length
-      ? Object.entries(gtmPlatforms).map(([name, cnt]) => chip2(name, cnt > 1 ? cnt + ' tags' : '')).join(' ')
+      ? Object.entries(gtmPlatforms).map(([name, cnt]) => {
+          const ids = gtmIds[name] || [];
+          return chip2(name, (cnt > 1 ? cnt + ' tags' : '') + (ids.length ? ' · ' + ids.join(', ') : ''));
+        }).join(' ')
       : '<span class="none">None detected</span>';
     const loadTimes = site.gtmLoadMs || {};
     const verification = site.gtmVerification || {
