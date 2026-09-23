@@ -405,7 +405,6 @@
       ? 'GTM-like references were found, but Google did not confirm them as published containers.'
       : 'The page was scanned, but no published GTM container could be decoded.';
     return `<div class="page-head"><div><h1>${title}</h1><p>${copy}</p></div></div>${siteCard(site, [])}`;
-  }`;
   }
 
   // ---------- summary strip (GTM Spy style) ----------
