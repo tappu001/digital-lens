@@ -58,7 +58,13 @@
   }
 
   function analyzeHtml(html, url, gtmLoadMs) {
-    const gtmIds = uniq(html.match(/GTM-[A-Z0-9]{4,10}\b/g) || []);
+    const rawGtmIds = uniq(html.match(/GTM-[A-Z0-9]{4,10}\b/gi) || []).map((id) => id.toUpperCase());
+    // CMS templates sometimes contain placeholder/configuration values such as
+    // GTM-OVERRIDE. These are not container IDs and should never be sent to
+    // Google's published gtm.js endpoint or shown as real GTM containers.
+    const gtmPlaceholderPattern = /^(?:GTM-)?(?:OVERRIDE|OVERRIDDEN|PLACEHOLDER|EXAMPLE|SAMPLE|DEMO|TEST|TESTING|YOUR(?:ID|GTM)?|XXXX+|REPLACE(?:ME)?|CHANGE(?:ME)?|DEFAULT|NULL|UNDEFINED)$/i;
+    const ignoredGtmIds = rawGtmIds.filter((id) => gtmPlaceholderPattern.test(id));
+    const gtmIds = rawGtmIds.filter((id) => !gtmPlaceholderPattern.test(id));
     const googleTagIds = uniq(html.match(/\b(?:G|AW|GT|DC)-[A-Z0-9]{6,15}\b/g) || []);
     const hardcodedGtag = uniq([...html.matchAll(/googletagmanager\.com\/gtag\/js\?id=([A-Z]{1,3}-[A-Z0-9]+)/gi)].map((m) => m[1].toUpperCase()));
     const gtagConfigCalls = uniq([...html.matchAll(/gtag\(\s*['"]config['"]\s*,\s*['"]([A-Z]{1,3}-[A-Z0-9]+)['"]/gi)].map((m) => m[1].toUpperCase()));
@@ -69,11 +75,12 @@
     const onPageIds = extractPlatformIds(html);
     const onPagePlatforms = TSD.catalog.detectPlatforms(html);
     const notes = [];
-    if (!gtmIds.length) notes.push('No GTM ID was found in the page HTML. The site may load GTM via JavaScript or a custom loader.');
+    if (!gtmIds.length && !ignoredGtmIds.length) notes.push('No GTM ID was found in the page HTML. The site may load GTM via JavaScript or a custom loader.');
+    if (ignoredGtmIds.length) notes.push('Ignored placeholder GTM reference(s) found in the page HTML; they were not treated as containers.');
     if (customLoaders.length) notes.push('Tag scripts load from a non-Google domain — likely a first-party or Stape custom loader.');
     if (/cdn\.shopify\.com|Shopify\.theme/i.test(html)) notes.push('This is a Shopify store. Tracking in Shopify customer events (web pixels) runs in a sandbox and does not appear in the page HTML.');
     return {
-      url, gtmIds, googleTagIds, hardcodedGtag, gtagConfigCalls,
+      url, gtmIds, ignoredGtmIds, googleTagIds, hardcodedGtag, gtagConfigCalls,
       tagScripts, customLoaders, sitePlatform, onPageIds, onPagePlatforms,
       platforms: onPagePlatforms, // keep backward compat
       gtmLoadMs: gtmLoadMs || null,
