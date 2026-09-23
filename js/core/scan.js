@@ -67,16 +67,34 @@
       if (r.status >= 400) throw new Error(`${target.url} returned HTTP ${r.status}. The site may block automated requests. Paste the GTM ID instead.`);
       const siteT0 = Date.now();
       result.site = TSD.sitescan.analyzeHtml(r.text, r.finalUrl || target.url);
-      const ids = result.site.gtmIds.slice(0, MAX_CONTAINERS);
-      for (const id of ids) {
+
+      // HTML can contain GTM-shaped strings that are not real published containers
+      // (for example CMS placeholders such as GTM-OVERRIDE). Never present those
+      // as real containers until Google confirms the published container exists.
+      const candidates = result.site.gtmIds.slice(0, MAX_CONTAINERS);
+      const verified = [];
+      const unverified = [];
+      for (const id of candidates) {
         try {
           const c = await loadContainer(fetchText, `https://www.googletagmanager.com/gtm.js?id=${id}`, id, 'gtm');
+          verified.push(id);
           result.site.gtmLoadMs = result.site.gtmLoadMs || {};
           result.site.gtmLoadMs[id] = c.loadMs;
-          result.containers.push(finish(c, { site: result.site, containerCount: ids.length }));
+          result.containers.push(finish(c, { site: result.site, containerCount: candidates.length }));
         } catch (e) {
-          result.errors.push({ id, message: e.message });
+          if (/Google returned 404/.test(e.message)) {
+            unverified.push(id);
+          } else {
+            result.errors.push({ id, message: e.message });
+          }
         }
+      }
+      result.site.gtmCandidates = candidates;
+      result.site.unverifiedGtmIds = unverified;
+      result.site.gtmIds = verified;
+      if (unverified.length) {
+        result.site.notes = result.site.notes || [];
+        result.site.notes.push(`Ignored ${unverified.length} GTM-like reference${unverified.length === 1 ? '' : 's'} that Google did not confirm as a published container: ${unverified.join(', ')}.`);
       }
     } else {
       const c = await loadContainer(fetchText, target.scriptUrl, target.id, target.kind);
