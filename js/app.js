@@ -318,17 +318,29 @@
       ? Object.entries(gtmPlatforms).map(([name, cnt]) => chip2(name, cnt > 1 ? cnt + ' tags' : '')).join(' ')
       : '<span class="none">None detected</span>';
     const loadTimes = site.gtmLoadMs || {};
+    const verification = site.gtmVerification || {
+      candidates: site.gtmCandidates ? site.gtmCandidates.length : site.gtmIds.length,
+      verified: site.gtmIds.length,
+      unverified: site.unverifiedGtmIds ? site.unverifiedGtmIds.length : 0,
+      ignoredPlaceholders: site.ignoredGtmIds ? site.ignoredGtmIds.length : 0,
+    };
     const loadHtml = site.gtmIds.length
       ? site.gtmIds.map(id => `<span style="margin-right:16px"><b style="font-family:monospace;font-size:13px">${esc(id)}</b> ${loadLabel(loadTimes[id])}</span>`).join('')
-      : '<span class="none">No GTM found</span>';
+      : '<span class="none">No verified GTM containers</span>';
+    const statusParts = [
+      `${verification.verified} verified`,
+      verification.unverified ? `${verification.unverified} unverified` : '',
+      verification.ignoredPlaceholders ? `${verification.ignoredPlaceholders} placeholder ignored` : '',
+    ].filter(Boolean);
     const notes = [...(site.notes || [])];
     if (site.unverifiedGtmIds && site.unverifiedGtmIds.length) {
-      notes.unshift(`GTM-like references not verified by Google: ${site.unverifiedGtmIds.join(', ')}`);
+      notes.unshift(`Unverified GTM-like reference(s) were excluded from the published container list: ${site.unverifiedGtmIds.length}`);
     }
     return `<div class="card" style="margin-bottom:16px"><div class="card-head"><h2>Website Insights</h2><span class="muted small">${esc(site.url)}</span></div><div class="card-body">
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px 28px;margin-bottom:16px">
         <div><div class="muted small" style="margin-bottom:4px">Built with</div><div style="font-weight:500">${esc(site.sitePlatform || 'Unknown')}</div></div>
         <div><div class="muted small" style="margin-bottom:4px">Verified GTM containers</div><div>${site.gtmIds.length ? site.gtmIds.map(id => chip2(id, 'published')).join(' ') : '<span class="none">None verified</span>'}</div></div>
+        <div><div class="muted small" style="margin-bottom:4px">GTM verification</div><div class="small">${esc(statusParts.join(' · ') || 'No GTM references detected')}</div></div>
         <div><div class="muted small" style="margin-bottom:4px">GTM load time</div><div>${loadHtml}</div></div>
       </div>
       <div style="border-top:1px solid var(--line-2,#e0e0e0);padding-top:14px;margin-bottom:12px">
@@ -344,7 +356,14 @@
   }
 
   function viewScanOnly() {
-    return `<div class="page-head"><div><h1>No containers decoded</h1><p>The page was scanned, but no GTM container could be decoded.</p></div></div>${siteCard(state.result.site, [])}`;
+    const site = state.result.site;
+    const v = site.gtmVerification || {};
+    const title = v.unverified ? 'No verified containers decoded' : 'No GTM containers decoded';
+    const copy = v.unverified
+      ? 'GTM-like references were found, but Google did not confirm them as published containers.'
+      : 'The page was scanned, but no published GTM container could be decoded.';
+    return `<div class="page-head"><div><h1>${title}</h1><p>${copy}</p></div></div>${siteCard(site, [])}`;
+  }`;
   }
 
   // ---------- summary strip (GTM Spy style) ----------
