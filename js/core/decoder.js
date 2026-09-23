@@ -195,14 +195,27 @@
 
       let platforms = [];
       let htmlInsight = null;
+      // Detect platform signatures from the actual tag configuration as well as
+      // Custom HTML. Community/custom templates often don't have a dedicated
+      // built-in tag type, but their parameters/permissions still expose the
+      // platform they integrate with.
+      const configEvidence = templateSignature(data, fn) + ' ' + JSON.stringify(paramsObj) + ' ' + JSON.stringify(t);
       if (fn === '__html') {
         htmlInsight = N.htmlInsight(toDisplay(paramsObj.html));
         platforms = htmlInsight.platforms;
       } else if (fn === '__img') {
         platforms = C.detectPlatforms(toDisplay(paramsObj.url));
       } else if (fn.startsWith('__cvt')) {
-        platforms = C.detectPlatforms(templateSignature(data, fn) + ' ' + JSON.stringify(paramsObj));
+        platforms = C.detectPlatforms(configEvidence);
+      } else {
+        platforms = C.detectPlatforms(configEvidence);
       }
+      const seenPlatforms = new Set();
+      platforms = platforms.filter((p) => {
+        if (seenPlatforms.has(p.name)) return false;
+        seenPlatforms.add(p.name);
+        return true;
+      });
       let category = typeInfo.category;
       if ((fn === '__html' || fn.startsWith('__cvt')) && platforms.length && platforms.every((p) => p.kind === 'consent')) category = 'consent';
       else if ((fn === '__html' || fn.startsWith('__cvt')) && platforms.some((p) => p.kind === 'ads')) category = fn === '__html' ? 'custom' : 'template';
