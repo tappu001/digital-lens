@@ -385,13 +385,13 @@
         <div style="display:flex;flex-wrap:wrap;gap:6px">${onPageHtml}</div>
       </div>
       <div style="border-top:1px solid var(--line-2,#e0e0e0);padding-top:14px">
-        <div class="muted small" style="margin-bottom:8px;font-weight:600;letter-spacing:.04em">VIA GTM</div>
+        <div class="muted small" style="margin-bottom:8px;font-weight:600;letter-spacing:.04em">GTM INTEGRATED PLATFORMS</div>
         <div style="display:flex;flex-wrap:wrap;gap:6px">${gtmPlatHtml}</div>
       </div>
       <div style="border-top:1px solid var(--line-2,#e0e0e0);padding-top:16px;margin-top:16px">
         <div class="card-head" style="padding:0 0 10px"><h2>Detected marketing &amp; analytics stack</h2><span class="muted small">${detectedCount} technologies</span></div>
         ${integrationHtml || '<div class="empty" style="padding:24px 8px">No known marketing or analytics signatures detected in the HTML.</div>'}
-        <div class="small muted" style="margin-top:14px">IDs are shown only when exposed in the fetched page. Platforms loaded after JavaScript execution, through server-side tracking, or behind consent may not be visible in a static scan.</div>
+        <div class="small muted" style="margin-top:14px">GTM platforms are derived from the decoded container configuration, including built-in tags, Custom HTML, and custom/community templates. IDs are shown only when they can be identified from the tag configuration. Static website detection is separate and does not imply that a platform is firing at runtime.</div>
       </div>
       ${notes.length ? `<ul class="hint" style="margin-top:14px">${notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
     </div></div>`;
