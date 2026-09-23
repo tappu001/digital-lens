@@ -72,6 +72,9 @@ Give Digital Lens a public website URL. The website scanner uses the configured 
 - Hotjar
 - GTM/custom tracking script loaders
 - On-page versus GTM-based tracking observations
+- **GTM Integrated Platforms**: platforms discovered inside decoded GTM tags, custom HTML, image tags, and community/custom templates
+- Platform-specific IDs where the published GTM configuration exposes them (GA4, Google Ads, Meta, TikTok, Snapchat, Pinterest, LinkedIn, Microsoft UET, Clarity, Hotjar, MoEngage, and Klaviyo where identifiable)
+- Separate website technology inventory so a platform detected in page HTML is not incorrectly presented as a GTM implementation
 
 Website Insights is not the GTM Audit. A website can be scanned even when no GTM container is found.
 
