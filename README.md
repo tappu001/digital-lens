@@ -145,7 +145,7 @@ The local server provides the fetch proxy, so GTM ID and website scans can work 
 # GitHub Pages hosting
 
 Digital Lens is a static HTML/CSS/JavaScript application, so GitHub Pages is suitable for the frontend.
-The official GitHub Pages documentation supports publishing static files from a repository and recommends GitHub Actions for automated deployment.
+The official GitHub Pages documentation supports publishing static files from a repository and recommends GitHub Pages for automated deployment.
 
 ## Step 1 — Create the repository
 
@@ -184,18 +184,20 @@ package.json
 server.js
 ```
 
-Make sure `.nojekyll` and `.github/workflows/deploy.yml` are included.
+Make sure `.nojekyll` is included. A GitHub Actions workflow is not required for the current branch-based Pages setup.
 
 ## Step 3 — Enable GitHub Pages
 
 In GitHub:
 
 1. Open the repository.
-2. Go to **Settings**.
-3. Open **Pages**.
-4. Under **Build and deployment**, select **GitHub Actions**.
-5. Open the **Actions** tab.
-6. Wait for **Deploy to GitHub Pages** to finish successfully.
+2. Go to **Settings → Pages**.
+3. Under **Build and deployment**, select **Deploy from a branch**.
+4. Select branch **main**.
+5. Select folder **/(root)**.
+6. Save.
+
+The repository already follows this structure, so `index.html` is served from the Pages root.
 
 For a repository named `digital-lens` owned by `tappu001`, the project URL will normally be:
 
