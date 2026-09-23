@@ -59,7 +59,8 @@ A Google OAuth **Web application** client ID is required for the hosted GA4 audi
 Give Digital Lens a public website URL. The website scanner uses the configured Cloudflare Worker to fetch the page HTML and then independently detects:
 
 - Website/CMS platform
-- GTM containers
+- GTM containers, verified against Google's published gtm.js response
+- GTM-like references that could not be verified, shown as evidence rather than real containers
 - Google tag / GA4 / Google Ads IDs
 - Meta Pixel
 - TikTok Pixel
