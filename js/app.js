@@ -838,6 +838,19 @@
     if (sort) { const k = sort.dataset.sort; state.sort = state.sort.key === k ? { key: k, dir: -state.sort.dir } : { key: k, dir: 1 }; render(); return; }
     if (sev) { state.sev = sev.dataset.sev; render(); return; }
     if (recent) { $('#q').value = recent.dataset.recent; decode({ input: recent.dataset.recent }); return; }
+    // Website Insights has its own scan button because the global header form is hidden in website mode.
+    if (t.closest('#websiteQuickBtn')) {
+      e.preventDefault();
+      const input = $('#websiteQuick');
+      const value = input ? input.value.trim() : '';
+      if (!value) {
+        notice('Enter a website URL.', 'error');
+        if (input) input.focus();
+        return;
+      }
+      decode({ input: value });
+      return;
+    }
     if (act) {
       const a = act.dataset.act;
       const c = C();
