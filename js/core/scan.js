@@ -92,9 +92,15 @@
       result.site.gtmCandidates = candidates;
       result.site.unverifiedGtmIds = unverified;
       result.site.gtmIds = verified;
+      result.site.gtmVerification = {
+        candidates: candidates.length,
+        verified: verified.length,
+        unverified: unverified.length,
+        ignoredPlaceholders: (result.site.ignoredGtmIds || []).length,
+      };
       if (unverified.length) {
         result.site.notes = result.site.notes || [];
-        result.site.notes.push(`Ignored ${unverified.length} GTM-like reference${unverified.length === 1 ? '' : 's'} that Google did not confirm as a published container: ${unverified.join(', ')}.`);
+        result.site.notes.push(`Found ${unverified.length} GTM-like reference${unverified.length === 1 ? '' : 's'} that Google did not confirm as a published container. They are excluded from the verified container list.`);
       }
     } else {
       const c = await loadContainer(fetchText, target.scriptUrl, target.id, target.kind);
