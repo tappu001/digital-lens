@@ -104,7 +104,14 @@ TSD.snapshots.useStore({ get: (k) => (mem.has(k) ? mem.get(k) : null), set: (k, 
     }
   );
   assert.deepStrictEqual(siteScan.site.gtmIds, ['GTM-REAL1234']);
-  assert.deepStrictEqual(siteScan.site.unverifiedGtmIds, ['GTM-OVERRIDE']);
+  assert.deepStrictEqual(siteScan.site.ignoredGtmIds, ['GTM-OVERRIDE']);
+  assert.deepStrictEqual(siteScan.site.unverifiedGtmIds, []);
+  assert.deepStrictEqual(siteScan.site.gtmVerification, {
+    candidates: 1,
+    verified: 1,
+    unverified: 0,
+    ignoredPlaceholders: 1,
+  });
   assert.strictEqual(siteScan.errors.length, 0);
   assert.strictEqual(siteScan.containers.length, 1);
 
