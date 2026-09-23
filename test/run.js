@@ -64,6 +64,12 @@ TSD.snapshots.useStore({ get: (k) => (mem.has(k) ? mem.get(k) : null), set: (k, 
   assert.deepStrictEqual(c.templates[0].permissions.scripts, ['https://analytics.tiktok.com/*']);
   assert.deepStrictEqual(c.templates[0].permissions.globals, ['ttq']);
 
+  // GTM platform inventory: integrations discovered inside tag configurations
+  const gtmPlatforms = new Set(c.tags.flatMap((t) => (t.platforms || []).map((p) => p.name)));
+  assert.ok(gtmPlatforms.has('Meta Pixel'), 'GTM Meta Pixel detected');
+  assert.ok(gtmPlatforms.has('TikTok Pixel'), 'GTM TikTok Pixel detected');
+  assert.ok(gtmPlatforms.has('Hotjar'), 'GTM Hotjar detected');
+
   // summary
   assert.ok(c.summary.ga4Ids.includes('G-ABC123XYZ'));
   assert.ok(c.summary.adsIds.includes('AW-123456789') && c.summary.adsIds.includes('AW-555'));
