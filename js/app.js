@@ -307,6 +307,14 @@
   function siteCard(site, containers) {
     const loadLabel = (ms) => ms == null ? '<span class="muted">—</span>' : ms < 300 ? `<span style="color:var(--green,#1e8e3e)">${ms}ms ✓</span>` : ms < 800 ? `<span style="color:var(--amber,#b06000)">${ms}ms</span>` : `<span style="color:var(--red,#c5221f)">${ms}ms ⚠</span>`;
     const chip2 = (txt, sub) => `<span class="chip plain" style="font-size:12px;padding:3px 10px">${esc(txt)}${sub ? `<span style="color:var(--text-3);margin-left:6px;font-weight:400">${esc(sub)}</span>` : ''}</span>`;
+    const detectedIntegrations = site.integrations || [];
+    const integrationGroups = {};
+    detectedIntegrations.forEach((x) => { (integrationGroups[x.category] || (integrationGroups[x.category] = [])).push(x); });
+    const integrationOrder = ['Analytics', 'Product Analytics', 'Advertising', 'Tag Management', 'Session Replay', 'Experimentation', 'Marketing Automation', 'Customer Data', 'Customer Engagement', 'Customer Support', 'Consent'];
+    const integrationHtml = integrationOrder.filter((k) => integrationGroups[k]).map((k) => {
+      return '<div class="integration-group"><div class="integration-group-title">' + esc(k) + '</div><div class="integration-list">' + integrationGroups[k].map((x) => '<div class="integration-item"><div class="integration-name"><b>' + esc(x.name) + '</b><span class="integration-evidence">' + esc(x.evidence) + '</span></div><div class="integration-ids">' + (x.ids.length ? x.ids.map((id) => '<code>' + esc(id) + '</code>').join(' ') : '<span class="none">No public ID detected</span>') + '</div></div>').join('') + '</div></div>';
+    }).join('');
+    const detectedCount = detectedIntegrations.length;
     const onPageIds = site.onPageIds || {};
     const onPagePlatforms = site.onPagePlatforms || site.platforms || [];
     const onPageHtml = onPagePlatforms.length
@@ -350,6 +358,11 @@
       <div style="border-top:1px solid var(--line-2,#e0e0e0);padding-top:14px">
         <div class="muted small" style="margin-bottom:8px;font-weight:600;letter-spacing:.04em">VIA GTM</div>
         <div style="display:flex;flex-wrap:wrap;gap:6px">${gtmPlatHtml}</div>
+      </div>
+      <div style="border-top:1px solid var(--line-2,#e0e0e0);padding-top:16px;margin-top:16px">
+        <div class="card-head" style="padding:0 0 10px"><h2>Detected marketing &amp; analytics stack</h2><span class="muted small">${detectedCount} technologies</span></div>
+        ${integrationHtml || '<div class="empty" style="padding:24px 8px">No known marketing or analytics signatures detected in the HTML.</div>'}
+        <div class="small muted" style="margin-top:14px">IDs are shown only when exposed in the fetched page. Platforms loaded after JavaScript execution, through server-side tracking, or behind consent may not be visible in a static scan.</div>
       </div>
       ${notes.length ? `<ul class="hint" style="margin-top:14px">${notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
     </div></div>`;
