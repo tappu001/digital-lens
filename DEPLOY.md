@@ -1,156 +1,157 @@
 # Digital Lens™ — Deployment Guide
 
-This guide gets the new Digital Lens landing page and audit application onto GitHub Pages and connects the existing Cloudflare Worker proxy.
+## Current production setup
 
-## Architecture
+**Frontend:** GitHub Pages  
+**Repository:** `tappu001/digital-lens`  
+**Branch:** `main`  
+**Pages folder:** `/(root)`  
+**Landing page:** `index.html`  
+**Workspace:** `app.html`
 
-```text
-GitHub Pages
-│
-├── index.html      → Digital Lens landing page
-└── app.html        → Audit workspace
-        │
-        └──────────────→ Cloudflare Worker
-                              │
-                              ├── Fetch website HTML
-                              └── Fetch published gtm.js
-```
+The repository is intentionally configured as a static GitHub Pages site. **Do not switch Pages to GitHub Actions** unless a deployment workflow is added later.
 
-The GA4 property audit is separate and uses Google OAuth + the Analytics Admin API.
+## 1. GitHub Pages settings
 
-## 1. GitHub repository
+In **Repository → Settings → Pages**:
 
-Create a repository such as `digital-lens`.
+- **Source:** Deploy from a branch
+- **Branch:** `main`
+- **Folder:** `/(root)`
 
-Upload the contents of this project to the repository root. Do not upload only the ZIP file.
+The expected URL is:
 
-The root must contain `index.html`, `app.html`, `assets/`, `js/`, `worker/`, `.github/`, `.nojekyll`, `README.md`, and the other project files.
+`https://tappu001.github.io/digital-lens/`
 
-## 2. GitHub Pages
+Workspace:
 
-1. Repository → **Settings** → **Pages**.
-2. Under **Build and deployment**, choose **GitHub Actions**.
-3. Push to `main`.
-4. The included `.github/workflows/deploy.yml` deploys the entire repository.
-5. Open the generated Pages URL.
+`https://tappu001.github.io/digital-lens/app.html`
 
-The landing page is `/` and the application is `/app.html`.
-
-For a project repository, the normal URL is:
+The project root must contain:
 
 ```text
-https://YOUR-USERNAME.github.io/YOUR-REPOSITORY/
+index.html
+app.html
+favicon.svg
+.nojekyll
+assets/
+js/
+worker/
+test/
+README.md
+DEPLOY.md
+package.json
+server.js
 ```
 
-## 3. Cloudflare Worker
+## 2. Cloudflare Worker
 
-The existing Worker can be reused. The frontend currently points to:
+The hosted scanner uses this Worker:
+
+`https://tagscope-proxy.dudhrejiyatapasvi.workers.dev`
+
+The frontend configuration is in `js/config.js`.
+
+The Worker must allow this origin:
+
+`https://tappu001.github.io`
+
+Cloudflare Worker environment variable:
 
 ```text
-https://tagscope-proxy.dudhrejiyatapasvi.workers.dev
+ALLOWED_ORIGINS=https://tappu001.github.io
 ```
 
-If that Worker is still deployed, you do not need to create another one.
+Do not add the repository path or trailing slash.
 
-### Recreate it if needed
+Test the Worker:
 
-1. Cloudflare Dashboard → **Workers & Pages**.
-2. Create a Worker.
-3. Open **Edit code**.
-4. Paste `worker/cloudflare-worker.js`.
-5. Deploy.
-6. Copy the `workers.dev` URL shown by Cloudflare.
+`https://tagscope-proxy.dudhrejiyatapasvi.workers.dev/health`
 
-Test:
+Expected response:
+
+```json
+{"ok":true,"app":"digital-lens-proxy"}
+```
+
+If `/health` works but Digital Lens reports **Proxy unreachable**, check the `ALLOWED_ORIGINS` value.
+
+## 3. Website Insights
+
+The flow is:
 
 ```text
-https://YOUR-WORKER-URL/health
+Website URL
+    ↓
+Digital Lens
+    ↓
+Cloudflare Worker
+    ↓
+Website HTML
+    ↓
+Digital Lens scanner
+    ↓
+Website Insights
 ```
 
-### Allow the GitHub Pages origin
+Website Insights independently detects the website platform, GTM containers, Google tags, Meta, TikTok, Snapchat, LinkedIn, Clarity, Pinterest, Hotjar and other tracking signals.
 
-Add an environment variable named:
+## 4. GTM Audit
 
-```text
-ALLOWED_ORIGINS
-```
+GTM Audit accepts:
 
-For example:
+- Published GTM container ID
+- Published `gtm.js` URL
+- Pasted `gtm.js` response
 
-```text
-https://tappu001.github.io
-```
+The Cloudflare Worker is used when the browser needs to fetch a published `gtm.js`.
 
-Use the origin only — no repository path and no trailing slash.
+The audit generates human-readable names because published GTM configuration does not reliably contain the original workspace names.
 
-If you use several frontend origins, separate them with commas.
+## 5. GA4 Audit
 
-## 4. Configure the frontend
+GA4 Audit is separate from GTM Audit and Website Insights.
 
-Edit `js/config.js`:
+A Measurement ID alone does not expose private GA4 Admin configuration. A real property audit requires Google OAuth and Analytics Admin API access.
 
-```js
-window.TSD_CONFIG = {
-  proxyUrl: 'https://YOUR-WORKER-URL',
-  ga4ClientId: '',
-};
-```
+Only the OAuth **client ID** may be placed in the frontend. Never place a client secret in GitHub.
 
-Commit and push.
+## 6. Local development
 
-## 5. Verify the website scanner
+Requirements:
 
-Open the hosted site → **Open Digital Lens** → **Website Insights**.
+- Node.js 18+
+- npm
 
-Enter a public website such as:
-
-```text
-https://example.com
-```
-
-The top status should say **Hosted proxy**.
-
-If it says **Proxy unreachable**, test `/health` and check `ALLOWED_ORIGINS`.
-
-## 6. Verify GTM
-
-Open **GTM Audit** and enter a published container ID such as:
-
-```text
-GTM-XXXXXXX
-```
-
-The application requests the published `gtm.js` through the Cloudflare Worker and decodes it in the browser.
-
-You can also paste a captured `gtm.js` response, which does not require the Worker.
-
-## 7. GA4 OAuth
-
-For the GA4 audit:
-
-1. Create/select a Google Cloud project.
-2. Enable the Google Analytics Admin API.
-3. Create an OAuth Web application client.
-4. Add the GitHub Pages origin to Authorized JavaScript origins.
-5. Put the **client ID only** into Digital Lens Settings or the GA4 Audit screen.
-6. Do not commit a client secret.
-7. Connect a Google account that has access to the GA4 property.
-
-## 8. Updating the product
-
-After making changes locally:
+Run:
 
 ```powershell
 npm test
-git add .
-git commit -m "Update Digital Lens"
-git push origin main
+node server.js
 ```
 
-GitHub Actions publishes the new version automatically.
+Open:
 
-## 9. Cloudflare changes
+`http://localhost:3000/`
 
-You only need to redeploy the Worker when `worker/cloudflare-worker.js` changes or when you need to change its environment variables/secrets.
+Workspace:
 
-Changing frontend files such as `index.html`, `app.html`, `js/app.js`, or `js/config.js` only requires a GitHub Pages deployment.
+`http://localhost:3000/app.html`
+
+## 7. Updating the hosted product
+
+Because Pages is configured as **Deploy from a branch → main → /(root)**, changes pushed to `main` are published by GitHub Pages automatically.
+
+After changing frontend files, wait for the Pages deployment and hard-refresh the browser with:
+
+`Ctrl + Shift + R`
+
+## 8. Cloudflare changes
+
+Only redeploy the Worker when `worker/cloudflare-worker.js` changes or Worker environment variables change.
+
+Frontend changes do not require a Cloudflare redeployment.
+
+## 9. Important
+
+Keep the project files at the repository root. Do **not** put them inside a `tagscope-decoder/` or other nested folder, otherwise the Pages root will not find `index.html` and the relative CSS/JS paths will break.
