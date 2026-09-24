@@ -8,7 +8,7 @@
 
   let settings = TSD.settings.get();
   const track = (fn, ...a) => { try { TSD.track && TSD.track[fn] && TSD.track[fn](...a); } catch (e) {} };
-  const state = { result: null, ci: 0, view: 'overview', q: '', filter: 'all', sev: 'all', sort: { key: 'name', dir: 1 }, stack: [], lastInput: '', mode: 'home', ga4: { audit: null, propertyId: '', loading: false, connected: false, section: 'overview', error: '', properties: [] } };
+  const state = { result: null, ci: 0, view: 'overview', q: '', filter: 'all', sev: 'all', sort: { key: 'name', dir: 1 }, stack: [], lastInput: '', mode: 'home', ga4: { audit: null, propertyId: '', loading: false, connected: false, section: 'overview', error: '', properties: [] }, ga4public: { data: null, measurementId: '', loading: false, error: '' } };
 
   const C = () => state.result && state.result.containers[state.ci];
   const style = () => settings.style;
@@ -127,6 +127,7 @@
     e.preventDefault();
     const v = $('#q').value.trim();
     if (!v) { notice(state.mode === 'website' ? 'Enter a website URL.' : 'Enter a GTM ID, Google tag ID, website URL, or gtm.js URL.', 'error'); $('#q').focus(); return; }
+    if (state.mode === 'ga4-public') return ga4PublicLoad(v);
     if (state.mode === 'ga4') return ga4LoadByInput(v);
     decode({ input: v });
   });
@@ -138,9 +139,10 @@
     const form = $('#decodeForm');
     const q = $('#q');
     const btn = $('#decodeBtn');
-    const showSearch = mode === 'gtm' || mode === 'website';
+    const showSearch = mode === 'gtm' || mode === 'website' || mode === 'ga4-public';
     form.hidden = !showSearch;
     if (mode === 'gtm') { q.placeholder = 'GTM-XXXXXXX, G-XXXXXXXXXX, or a gtm.js URL'; btn.textContent = 'Audit GTM'; }
+    if (mode === 'ga4-public') { q.placeholder = 'G-XXXXXXXXXX'; btn.textContent = 'Inspect GA4'; }
     if (mode === 'website') { q.placeholder = 'https://example.com'; btn.textContent = 'Scan website'; }
     if (mode === 'ga4') { q.placeholder = 'GA4 Measurement ID or Property ID'; btn.textContent = 'Audit GA4'; }
     if (mode === 'home') { q.placeholder = 'Choose an audit above'; }
@@ -162,6 +164,7 @@
     layout.classList.toggle('no-nav', !c || state.mode !== 'gtm');
     $('#sidenav').hidden = !c || state.mode !== 'gtm';
     if (state.mode === 'home') { $('#view').innerHTML = viewWorkspace(); return; }
+    if (state.mode === 'ga4-public') { $('#view').innerHTML = viewGA4Public(); bindGA4Public(); return; }
     if (state.mode === 'ga4') { $('#view').innerHTML = viewGA4(); bindGA4(); return; }
     if (state.mode === 'website') { $('#view').innerHTML = state.result && state.result.site ? viewWebsiteOnly() : viewWebsiteLanding(); return; }
     if (!c) { $('#view').innerHTML = state.view === 'scan' && state.result ? viewScanOnly() : viewLanding(); return; }
@@ -256,6 +259,37 @@
     const sections = [['overview','Overview'],['property','Property'],['streams','Data streams'],['events','Key events'],['enhanced','Enhanced measurement'],['acquisition','Acquisition settings'],['identity','Reporting identity'],['retention','Data retention'],['definitions','Custom definitions'],['filters','Data filters'],['integrations','Integrations'],['audiences','Audiences']];
     return `<aside class="ga4-side"><div class="ga4-side-label">PROPERTY AUDIT</div>${sections.map(([id,n]) => `<button data-ga4-section="${id}" class="${state.ga4.section===id?'active':''}">${n}</button>`).join('')}<div class="ga4-side-note">Read-only audit<br>via Google Analytics Admin API</div></aside>`;
   }
+  function ga4PublicStatus(ok, label) { return `<span class="status-pill ${ok ? 'ok' : 'muted'}"><i></i>${esc(label)}</span>`; }
+  function ga4PublicMetric(v, label) { return `<div class="ga-metric"><div class="ga-metric-value">${esc(v)}</div><div class="ga-metric-label">${esc(label)}</div></div>`; }
+  function publicValue(v) { return v == null || v === '' ? 'Not publicly exposed' : v; }
+  function ga4PublicSection(data) {
+    const key = state.ga4public.section || 'overview';
+    const nav = [['overview','Overview'],['events','Events'],['enhanced','Enhanced measurement'],['configuration','Configuration'],['relationships','Relationships']];
+    const side = `<aside class="ga4-side"><div class="ga4-side-label">GA4 INSPECTOR</div>${nav.map(([id,n]) => `<button data-ga4-public-section="${id}" class="${key===id?'active':''}">${n}</button>`).join('')}<div class="ga4-side-note">Public configuration only<br>No GA4 login required</div></aside>`;
+    const cfg=data.config||{};
+    let body='';
+    if(key==='overview') body=`<div class="module-head"><div><div class="module-kicker">GA4 PUBLIC INSPECTOR</div><h1>${esc(data.measurementId)}</h1><p>Public Google tag configuration discovered from the browser-served GA4 payload.</p></div><div>${ga4PublicStatus(true,'Public config')} <button class="btn-outline" id="ga4PublicRefresh">Refresh</button></div></div><div class="ga-metrics">${ga4PublicMetric(data.platform.toUpperCase(),'Platform')}${ga4PublicMetric(data.scriptBytes ? Math.round(data.scriptBytes/1024)+' KB' : '—','Payload')}${ga4PublicMetric(data.enhanced.events.length,'Enhanced events')}${ga4PublicMetric(data.events.keyEvents.length,'Key events')}${ga4PublicMetric(data.events.create.length,'Create events')}${ga4PublicMetric(data.events.modify.length,'Modify events')}</div><div class="ga-grid"><div class="ga-card"><h2>Property signal</h2>${ga4Row('Measurement ID',data.measurementId)}${ga4Row('Google tag payload',data.dataFound?'Parsed':'Detected')}${ga4Row('Enhanced measurement',data.enhanced.enabled==null?'Not publicly exposed':(data.enhanced.enabled?'Enabled':'Disabled'))}${ga4Row('Cross-domain',cfg.linkerDomains.length?'Configured':'Not detected')}${ga4Row('Unwanted referrals',data.availability.unwantedReferrals)}</div><div class="ga-card"><h2>What this scan can prove</h2><div class="coverage-list">${coverage('Measurement ID',true)}${coverage('Public tag payload',true)}${coverage('Enhanced measurement hints',data.enhanced.events.length>0)}${coverage('Private GA4 Admin settings',false)}${coverage('GA4 report data',false)}</div><div class="api-note">A Measurement ID is public. This inspector does not claim access to private property settings or report data.</div></div></div>${data.hints.length?`<div class="ga-card wide ga4-public-notes"><h2>Detected public signals</h2>${data.hints.map(x=>`<div class="def-row"><b>Detected</b><span>${esc(x)}</span></div>`).join('')}</div>`:''}`;
+    if(key==='events') body=`<div class="module-head"><div><div class="module-kicker">EVENT CONFIGURATION</div><h1>Events</h1><p>Only events exposed in the public tag payload are shown as detected.</p></div></div><div class="ga-grid"><div class="ga-card"><h2>Enhanced measurement</h2>${data.enhanced.events.map(x=>`<div class="def-row"><b>${esc(x)}</b><span>Automatically measured</span></div>`).join('')||'<div class="empty">No enhanced-measurement event names were exposed.</div>'}</div><div class="ga-card"><h2>Configured event rules</h2>${[['Key events',data.events.keyEvents],['Create events',data.events.create],['Modify events',data.events.modify]].map(([n,arr])=>`<div class="def-row"><b>${n}</b><span>${arr.length?arr.map(esc).join(', '):'Not publicly exposed'}</span></div>`).join('')}</div></div>`;
+    if(key==='enhanced') body=`<div class="module-head"><div><div class="module-kicker">AUTOMATIC COLLECTION</div><h1>Enhanced measurement</h1><p>Signals inferred from the public Google tag payload.</p></div></div><div class="ga-card wide"><div class="toggle-grid">${[['Page views',data.enhanced.events.includes('Page views')],['Scrolls',data.enhanced.events.includes('Scrolls')],['Outbound clicks',data.enhanced.events.includes('Outbound clicks')],['Site search',data.enhanced.events.includes('Site search')],['Video engagement',data.enhanced.events.includes('Video engagement')],['File downloads',data.enhanced.events.includes('File downloads')],['Form interactions',data.enhanced.events.includes('Form interactions')]].map(([n,on])=>toggle(n,on)).join('')}</div><div class="api-note">Detected event names are evidence from the public payload, not a substitute for the GA4 Admin API setting.</div></div>`;
+    if(key==='configuration') body=`<div class="module-head"><div><div class="module-kicker">PUBLIC TAG SETTINGS</div><h1>Configuration</h1><p>Values Digital Lens can extract without Google account access.</p></div></div><div class="ga-grid"><div class="ga-card">${ga4Row('send_page_view',publicValue(cfg.sendPageView==null?null:(cfg.sendPageView?'true':'false')))}${ga4Row('allow_google_signals',publicValue(cfg.allowGoogleSignals==null?null:(cfg.allowGoogleSignals?'true':'false')))}${ga4Row('Cookie domain',publicValue(cfg.cookieDomain))}${ga4Row('Cookie expiry',publicValue(cfg.cookieExpires))}${ga4Row('Debug mode',cfg.debugMode?'Enabled':'Not detected')}</div><div class="ga-card">${ga4Row('Server container URL',publicValue(cfg.serverContainerUrl))}${ga4Row('Transport URL',publicValue(cfg.serverContainerUrl))}${ga4Row('Consent signals',cfg.consent.length?cfg.consent.join(' · '):'Not publicly exposed')}${ga4Row('Raw GA4 IDs found',data.ids.join(', '))}</div></div>`;
+    if(key==='relationships') body=`<div class="module-head"><div><div class="module-kicker">IMPLEMENTATION RELATIONSHIPS</div><h1>Related configuration</h1><p>Connections that can be inferred from the public payload.</p></div></div><div class="ga-card wide">${ga4Row('Cross-domain domains',cfg.linkerDomains.length?cfg.linkerDomains.join(', '):'Not detected')}${ga4Row('Server-side tagging',cfg.serverContainerUrl?'Detected':'Not detected')}${ga4Row('Consent Mode signals',cfg.consent.length?'Detected':'Not detected')}${ga4Row('GTM container', 'Not identifiable from this GA4 ID alone')}${ga4Row('Google Ads link', 'Not publicly exposed')}${ga4Row('BigQuery link', 'Not publicly exposed')}${ga4Row('Search Console link', 'Not publicly exposed')}</div>`;
+    return `<div class="ga4-shell">${side}<main class="ga4-main">${state.ga4public.error?`<div class="notice error">${esc(state.ga4public.error)}</div>`:''}${body}</main></div>`;
+  }
+  function viewGA4Public() {
+    const d=state.ga4public.data;
+    if(!d) return `<section class="ga4-connect"><div class="module-kicker">GA4 PUBLIC INSPECTOR</div><h1>Analyze a GA4 property.<br><span>No Google login required.</span></h1><p>Enter a Measurement ID and Digital Lens will inspect the public Google tag configuration that browsers receive. It does not access GA4 reports or private Admin settings.</p><div class="connect-card"><div class="connect-logo">◉</div><div><h2>Public GA4 configuration</h2><p>Measurement IDs are public identifiers. The scan is read-only and uses the configured fetch proxy on the hosted app.</p><div class="ga4-client-row"><input id="ga4PublicId" placeholder="G-XXXXXXXXXX" value="${esc(state.ga4public.measurementId)}"><button class="btn-primary" id="ga4PublicInspect">Inspect GA4</button></div><p class="small muted">Source: browser-served Google tag payload. Private property data is intentionally marked unavailable.</p></div></div><div class="api-scope"><b>Public signals Digital Lens can inspect</b><span>Measurement ID</span><span>Google tag payload</span><span>Enhanced measurement hints</span><span>Consent signals</span><span>Cross-domain linker</span><span>Server-side transport</span><span>Event configuration when publicly exposed</span></div></section>`;
+    return ga4PublicSection(d);
+  }
+  async function ga4PublicLoad(id){
+    state.ga4public.measurementId=String(id||'').trim().toUpperCase(); state.ga4public.loading=true; state.ga4public.error=''; render();
+    try { state.ga4public.data=await TSD.ga4public.inspect(state.ga4public.measurementId,TSD.net.fetchText); state.ga4public.section='overview'; } catch(e) { state.ga4public.data=null; state.ga4public.error=e.message||String(e); } finally { state.ga4public.loading=false; render(); }
+  }
+  function bindGA4Public(){
+    document.querySelectorAll('[data-ga4-public-section]').forEach(b=>b.addEventListener('click',()=>{state.ga4public.section=b.dataset.ga4PublicSection;render();}));
+    const i=$('#ga4PublicInspect'); if(i)i.addEventListener('click',()=>ga4PublicLoad($('#ga4PublicId').value.trim()));
+    const r=$('#ga4PublicRefresh'); if(r)r.addEventListener('click',()=>ga4PublicLoad(state.ga4public.measurementId));
+  }
+
   function viewGA4() {
     const a = state.ga4.audit;
     if (!a) { const props=state.ga4.properties||[]; return `<section class="ga4-connect"><div class="module-kicker">GA4 PROPERTY AUDIT</div><h1>Audit the property.<br><span>Not the tracking snippet.</span></h1><p>Connect a Google account with access to the GA4 property. Digital Lens reads the property's administrative configuration through Google's Analytics Admin API.</p><div class="connect-card"><div class="connect-logo">◉</div><div><h2>${state.ga4.connected?'Google Analytics connected':'Connect Google Analytics'}</h2><p>Read-only access is requested. Digital Lens does not request edit access.</p>${!state.ga4.connected?`<div class="ga4-client-row"><label>Google OAuth Web Client ID <input id="ga4ClientId" value="${esc(TSD_GA4.getClientId())}" placeholder="1234567890-xxxxxxxx.apps.googleusercontent.com"></label><button class="btn-outline" id="saveGa4Client">Save ID</button></div><button class="btn-primary big" id="connectGa4">Connect Google account</button>`:`<div class="property-picker"><label>Choose a GA4 property<select id="ga4PropertySelect"><option value="">Select a property…</option>${props.map(x=>`<option value="${esc(x.id)}" ${x.id===state.ga4.propertyId?'selected':''}>${esc(x.displayName)} · ${esc(x.id)}</option>`).join('')}</select></label><div class="orline"><span>or audit by Measurement ID</span></div><div class="ga4-client-row"><input id="ga4MeasurementId" placeholder="G-XXXXXXXXXX"><button class="btn-primary" id="auditMeasurement">Audit Measurement ID</button></div><button class="btn-primary big" id="auditProperty">Audit selected property</button></div>`}<p class="small muted">A Google Cloud OAuth Web Client is required for the hosted version. The client ID is public; no client secret belongs in this app.</p></div></div><div class="api-scope"><b>What Digital Lens can audit</b><span>Property metadata</span><span>Data streams</span><span>Key events</span><span>Enhanced measurement</span><span>Reporting identity</span><span>Retention</span><span>Custom definitions</span><span>Filters</span><span>Google Ads / BigQuery links</span></div></section>`; }
