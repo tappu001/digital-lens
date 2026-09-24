@@ -631,3 +631,8 @@ body { background: #f6f7f9; color: var(--ink); }
 .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
 .module-results { min-width: 0; }
 @media (max-width: 560px) { .grid.inv { min-width: 560px; } .module-head { flex-direction: column; align-items: flex-start; } .module-head h1 { font-size: 26px; overflow-wrap: anywhere; } }
+.raw-tpl { margin-top: 10px; }
+.raw-tpl summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+.raw-item { background: #fff; border: 1px solid var(--line3); border-radius: 9px; padding: 8px 10px; margin-top: 8px; }
+.raw-item code { font-size: 11px; color: var(--muted); }
+.raw-item pre { margin: 6px 0 0; font: 11px/1.45 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; }

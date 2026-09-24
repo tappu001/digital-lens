@@ -163,6 +163,10 @@
     __ogt_event_create: 'Create event rule',
     __ogt_event_edit: 'Modify event rule',
     __ogt_cps: 'Consent / privacy setting',
+    __ogt_auto_events: 'Manage automatic event detection',
+    __ogt_ga_send: 'Collect Universal Analytics events',
+    __ogt_data_extract: 'Extract data from your page',
+    __dest_ga: 'GA4 destination settings',
   };
   Object.entries(ENHANCED).forEach(([fn, x]) => { TEMPLATES[fn] = `Enhanced measurement · ${x.label}`; });
   const isModifyTemplate = (fn) => /^__(?:ogt|ccd)_.*(?:event_edit|event_modify|modify_event|edit_event)/.test(fn);
@@ -788,6 +792,24 @@
       known.forEach(([k, label]) => { if (P[k] != null) oneLines.push({ label, toggle: truthy(P[k]) }); });
     }
 
+    // Settings of templates whose parameter names are shown as-is (humanised), so nothing
+    // is re-labelled on a guess.
+    const human = (k) => { const t = camelToSnake(k).replace(/_/g, ' '); return t.charAt(0).toUpperCase() + t.slice(1); };
+    const paramLines = (t) => Object.entries(t ? t.params : {}).filter(([k]) => !/^instanceDestinationId$/.test(k)).map(([k, v]) => {
+      if (typeof v === 'boolean' || v === 'true' || v === 'false') return { label: human(k), toggle: truthy(v) };
+      if (Array.isArray(v)) return { label: human(k), value: v.length ? v.map((x) => (typeof x === 'object' ? JSON.stringify(x) : String(x))).join(', ') : 'None' };
+      return { label: human(k), value: show(v) };
+    });
+    const listCount = (t) => { if (!t) return 0; const l = Object.values(t.params).find((v) => Array.isArray(v)); return l ? l.length : 0; };
+    const autoEv = first('__ogt_auto_events');
+    const gaSend = first('__ogt_ga_send');
+    const extract = first('__ogt_data_extract');
+    const destGa = first('__dest_ga');
+    const adsLink = first('__ccd_ga_ads_link');
+    const enabledOf = (t) => { if (!t) return false; const k = Object.keys(t.params).find((x) => /^(is)?enabled$|^enable/i.test(x)); return k ? truthy(t.params[k]) : true; };
+    const autoChips = autoEv ? Object.entries(autoEv.params).filter(([k, v]) => truthy(v) && k !== 'instanceDestinationId').map(([k]) => human(k)) : [];
+    const adsDest = report.destinations.filter((d) => d.type === 'Google Ads');
+
     const sections = [
       { title: 'Events', rows: [
         { key: 'enhanced', icon: 'sparkle', title: 'Enhanced measurement', desc: 'Automatically measure interactions and content on your sites.', toggle: em.length > 0,
@@ -799,14 +821,18 @@
         redact ? { key: 'redact', icon: 'eraser', title: 'Redact data', desc: 'Prevent specific data from being sent to Google Analytics.',
           badges: [`Email ${truthy(redact.params.redactEmail) ? 'active' : 'inactive'}`, `URL params ${redact.params.redactQueryParams ? 'active' : 'inactive'}`],
           lines: [{ label: 'Email', toggle: truthy(redact.params.redactEmail) }, { label: 'Query parameters', toggle: !!redact.params.redactQueryParams, value: redact.params.redactQueryParams ? show(redact.params.redactQueryParams) : '' }] } : null,
+        { key: 'uaevents', icon: 'sparkle', title: 'Collect Universal Analytics events', desc: 'Collect an event each time a ga() custom event, timing, or exception call occurs.', toggle: enabledOf(gaSend), lines: paramLines(gaSend) },
       ].filter(Boolean) },
       { title: 'Google tag', rows: [
+        { key: 'autoevents', icon: 'sparkle', title: 'Manage automatic event detection', desc: 'Configure which types of events should automatically be detected for measurement in associated Google destinations.', toggle: !!autoEv,
+          chipsLabel: autoChips.length ? 'Detecting' : '', chips: autoChips, lines: paramLines(autoEv) },
         { key: 'domains', icon: 'link', title: 'Configure your domains', desc: 'Specify a list of domains for cross-domain measurement.', badges: [report.linker.domains.length ? plural(report.linker.domains.length, 'domain') : 'No domains'], items: report.linker.domains.map((d) => ({ title: d.domain })) },
         { key: 'internal', icon: 'users', title: 'Define internal traffic', desc: 'Define IP addresses whose traffic should be marked as internal.', badges: [plural(internal.length, 'rule')],
           items: internal.map((t) => ({ title: `traffic_type = ${show(t.params.paramValue != null ? t.params.paramValue : 'internal')}`, lines: ['IP address conditions are evaluated by Google and are not included in the public tag.'] })) },
         { key: 'referrals', icon: 'unlink', title: 'List unwanted referrals', desc: 'Specify domains whose traffic should not be considered to be referrals.', badges: [String(report.referralExclusions.length)], items: report.referralExclusions.map((d) => ({ title: d.domain })) },
         { key: 'session', icon: 'timer', title: 'Adjust session timeout', desc: 'Set how long sessions can last.', badges: session ? [] : ['Not in tag'], lines: sessionLines },
         { key: 'cookies', icon: 'cookie', title: 'Override cookie settings', desc: 'Change how long cookies last and how they are updated.', badges: cookieParams.length ? [] : ['Not in tag'], lines: cookieParams },
+        { key: 'extract', icon: 'plus', title: 'Extract data from your page', desc: 'Pull values from JS variables, CSS selectors or the data layer into event parameters.', badges: [plural(listCount(extract), 'rule')], lines: paramLines(extract) },
         onep ? { key: 'updc', icon: 'id', title: 'Allow user-provided data capabilities', desc: 'Configure whether to allow user-provided data in measurement.', toggle: truthy(onep.params.isEnabled) } : null,
         { key: 'connected', icon: 'plug', title: 'Connected site tags', desc: "Load tags for additional properties using this stream's Google tag.", badges: [`${connected.length} connected`], items: connected.map((d) => ({ title: d.id, lines: [d.type + (d.labels.length ? ` · ${d.labels.join(', ')}` : '')] })) },
         dma ? { key: 'dma', icon: 'shield', title: 'Manage default consent settings for data collection', desc: 'Default labels for end-user data from the EEA used for advertising purposes.', badges: [show(dma.params.dmaDefault || 'Configured')],
@@ -818,10 +844,22 @@
         geo ? { key: 'geo', icon: 'pin', title: 'Granular location and device data collection', desc: geo.text, toggle: geo.on } : null,
         onep ? { key: 'upd', icon: 'id', title: 'User-provided data collection', desc: 'Sends hashed, consented user-provided data to Analytics for improved measurement and audiences.', toggle: truthy(onep.params.isEnabled), lines: oneLines } : null,
       ].filter(Boolean) },
+      { title: 'Tag signals', rows: [
+        { key: 'adslink', icon: 'plug', title: 'Google Ads link', desc: 'Sends signals to a linked Google Ads destination.', toggle: !!adsLink,
+          lines: adsLink ? [{ label: 'Linked Google Ads account ID', value: 'Not in the public tag' }, ...paramLines(adsLink)] : [] },
+        destGa ? { key: 'destga', icon: 'id', title: 'GA4 destination settings', desc: 'Destination-level settings compiled into the Google tag.', lines: paramLines(destGa) } : null,
+      ].filter(Boolean) },
+      { title: 'Product links', rows: [
+        { key: 'plads', icon: 'plug', title: 'Google Ads', desc: adsLink ? 'Linked — the Google tag carries the Google Ads link signal.' : 'No Google Ads link signal in the public tag.', badges: [adsLink ? 'Linked' : 'Not detected'],
+          items: adsDest.map((d) => ({ title: d.id, lines: ['Google Ads destination loaded by this Google tag'] })) },
+        { key: 'plother', icon: 'shield', title: 'Other product links', desc: 'BigQuery, Search Console, Merchant Center, AdSense, AdMob, Ad Manager, Display & Video 360, Search Ads 360, Floodlight, Google Play, Business Profile, Meta, Pinterest, Reddit, Snap and TikTok links.', badges: ['Not public'],
+          lines: [{ label: 'Where to see them', value: 'GA4 Admin → Product links (needs property access)' }] },
+      ] },
     ].filter((sec) => sec.rows.length);
 
     const known = new Set([...Object.keys(TEMPLATES)]);
     const other = [...new Set(report.templates.filter((t) => !known.has(t.fn) && !isCreateTemplate(t.fn) && !isModifyTemplate(t.fn)).map((t) => t.fn))];
+    const raw = report.templates.map((t) => ({ fn: t.fn, label: TEMPLATES[t.fn] || (isCreateTemplate(t.fn) ? 'Create event rule' : isModifyTemplate(t.fn) ? 'Modify event rule' : 'Not decoded'), params: t.params }));
 
     return {
       stats: [
@@ -834,6 +872,7 @@
       ],
       sections,
       other,
+      raw,
     };
   }
 
