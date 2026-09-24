@@ -108,13 +108,13 @@ The Cloudflare Worker is used when the browser needs to fetch a published `gtm.j
 
 The audit generates human-readable names because published GTM configuration does not reliably contain the original workspace names.
 
-## 5. GA4 Audit
+## 5. GA4 Inspector
 
-GA4 Audit is separate from GTM Audit and Website Insights.
+The GA4 Inspector is separate from GTM Audit and Website Insights. It takes a public Measurement ID and reads Google's public Google tag response through the same Worker:
 
-A Measurement ID alone does not expose private GA4 Admin configuration. A real property audit requires Google OAuth and Analytics Admin API access.
+`https://www.googletagmanager.com/gtm.js?id=G-…`, falling back to `https://www.googletagmanager.com/gtag/js?id=G-…`
 
-Only the OAuth **client ID** may be placed in the frontend. Never place a client secret in GitHub.
+No OAuth client, Google login or GA4 Admin API is used, and no Worker change is required. Private GA4 property settings are never shown.
 
 ## 6. Local development
 

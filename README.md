@@ -3,8 +3,8 @@
 **See what matters.**
 
 Digital Lens is a tracking and measurement audit workspace built by **Tapasvi Dudhrejiya**.
-It is deliberately split into independent audit surfaces so website detection, GTM configuration,
-and GA4 property configuration do not get mixed together.
+It is deliberately split into independent workspaces so website detection, GTM configuration,
+and public Google tag / GA4 configuration do not get mixed together.
 
 - Email: `dudhrejiyatapasvi@gmail.com`
 - LinkedIn: `https://www.linkedin.com/in/tapasvi-dudhrejiya/`
@@ -27,32 +27,37 @@ Give Digital Lens a published GTM container ID or `gtm.js` URL. It decodes the p
 
 Important: GTM removes real workspace names from the published container. Digital Lens therefore generates descriptive names from the item's settings. It does not claim that generated names are the original GTM names.
 
-### 2. GA4 Property Audit
+### 2. GA4 Inspector (public Google tag configuration)
 
-This is a separate property-level audit. A GA4 Measurement ID such as `G-XXXXXXXXXX` is **not treated as a GTM input**.
+Give Digital Lens a public Measurement ID such as `G-EJPKTC03EM` (Google tag `GT-`, Google Ads `AW-` and Floodlight `DC-` IDs are also accepted). **No Google login, OAuth or GA4 Admin API access is used.**
 
-The user connects a Google account with access to the GA4 property. Digital Lens uses Google's Analytics Admin API with read-only access to inspect the configuration exposed by the API, including:
+Digital Lens validates the ID, requests the public Google tag response through the fetch proxy:
 
-- Property name and ID
-- Currency
-- Industry category
-- Reporting time zone
-- Creation time where available
-- Web / Android / iOS data streams
-- Key events
-- Enhanced Measurement settings
-- Reporting identity
-- Data retention
-- Custom dimensions
-- Custom metrics
-- Data filters
-- Google Ads links
-- BigQuery links
-- Google Signals information where available
-- Audiences
-- Referral/acquisition configuration status, with unavailable fields explicitly marked instead of guessed
+```text
+https://www.googletagmanager.com/gtm.js?id=G-EJPKTC03EM     (primary)
+https://www.googletagmanager.com/gtag/js?id=G-EJPKTC03EM    (fallback)
+```
 
-A Google OAuth **Web application** client ID is required for the hosted GA4 audit. Never place a Google OAuth client secret in this repository.
+and parses the `var data = {…}` configuration block without executing it. Settings are read only from explicit Google tag template entries, so cookie names (`__ga`, `__utma`…) or library variables can never be reported as events. When present in the public response, it reports:
+
+- Destination IDs (G-, GT-, AW-, DC-) and conversion labels
+- Enhanced measurement templates (page views, scrolls, outbound clicks, site search, video, file downloads, forms)
+- Key event rules, create-event rules and modify-event rules
+- Cross-domain linker domains and unwanted referrals
+- Google signals, region-specific data controls, data redaction, user-provided data collection, internal traffic rules, EEA/DMA settings, session settings
+
+Optionally add a **website URL**. Digital Lens then compares the site with the ID:
+
+- `gtag('config', …)` / `gtag('set', …)` values in the page HTML: `send_page_view`, `allow_google_signals`, `ads_data_redaction`, `url_passthrough`, cookie settings, linker, `server_container_url` and `transport_url` (kept separate), campaign and page fields
+- `gtag('consent', 'default' | 'update', …)`: shown separately
+- `gtag('event', …)` calls for this ID
+- Verified GTM containers that reference the ID, their Google tag settings and GA4 event tags
+
+Every value has an **Evidence** row (field, value, source, location). Sources are always labelled: *Google tag response (gtm.js / gtag.js)*, *Website HTML* or *GTM container*. `user_id` / `client_id` values are never displayed, only that they are configured. Values set at runtime are shown as runtime values, not guessed. Anything not found is shown as **Not publicly exposed**.
+
+Inspection status is one of *Public configuration detected*, *Partial public configuration* or *No readable public configuration*. If the proxy is unavailable, the Google tag response can be pasted instead.
+
+**Limitation:** private GA4 Admin settings, reports, audiences, custom definitions, data retention, product links and account-level configuration are not publicly exposed and are never shown or inferred. (The earlier OAuth-based GA4 Property Audit has been removed.)
 
 ### 3. Website Insights
 
@@ -75,6 +80,8 @@ Give Digital Lens a public website URL. The website scanner uses the configured 
 - **GTM Integrated Platforms**: platforms discovered inside decoded GTM tags, custom HTML, image tags, and community/custom templates
 - Platform-specific IDs where the published GTM configuration exposes them (GA4, Google Ads, Meta, TikTok, Snapchat, Pinterest, LinkedIn, Microsoft UET, Clarity, Hotjar, MoEngage, and Klaviyo where identifiable)
 - Separate website technology inventory so a platform detected in page HTML is not incorrectly presented as a GTM implementation
+- Technology fingerprints (CMS, ecommerce platform, website builder, JavaScript framework, CDN) from specific signatures rather than bare words
+- Google tag on the page: hardcoded IDs and `gtag('consent')` default/update calls, with a one-click link into the GA4 Inspector
 
 Website Insights is not the GTM Audit. A website can be scanned even when no GTM container is found.
 
@@ -100,7 +107,7 @@ js/
     naming.js              Human-readable naming engine
     audit.js               GTM audit findings
     sitescan.js             Website technology/tracking scanner
-    ga4.js                 GA4 Admin API client/audit
+    ga4public.js           Public Google tag / GA4 configuration inspector
     scan.js                GTM + website scan orchestration
     parser.js              Published GTM parser
     catalog.js             Platform/type catalog
@@ -108,10 +115,10 @@ js/
 worker/
   cloudflare-worker.js     CORS/fetch proxy for GitHub Pages
 .github/workflows/
-  deploy.yml               GitHub Pages deployment
+  validate.yml             Regression tests on push / pull request
 server.js                  Local development server and local proxy
 DEPLOY.md                  Detailed GitHub + Cloudflare deployment guide
-test/                      Decoder regression tests
+test/                      Decoder, website and GA4 Inspector regression tests
 ```
 
 ---
@@ -319,7 +326,6 @@ Set:
 ```js
 window.TSD_CONFIG = {
   proxyUrl: 'https://YOUR-WORKER-NAME.YOUR-SUBDOMAIN.workers.dev',
-  ga4ClientId: '',
 };
 ```
 
@@ -355,31 +361,11 @@ If the Worker is not reachable, Digital Lens will intentionally show a proxy err
 
 ---
 
-# GA4 Audit setup
+# GA4 Inspector notes
 
-The GA4 audit is different from the website and GTM scanners.
+The GA4 Inspector needs no Google Cloud project, OAuth client or API key. It only uses the same Cloudflare Worker (or local server) as the other workspaces to read Google's public `gtm.js` / `gtag.js` response.
 
-A Measurement ID such as:
-
-```text
-G-XXXXXXXXXX
-```
-
-does not expose the private administrative configuration of a GA4 property by itself.
-
-To perform a real property audit:
-
-1. Create a Google Cloud project.
-2. Enable the Google Analytics Admin API.
-3. Create an OAuth **Web application** client.
-4. Add your GitHub Pages origin as an authorized JavaScript origin.
-5. Open Digital Lens.
-6. Go to **GA4 Audit**.
-7. Enter the OAuth Web Client ID.
-8. Connect the Google account that has access to the GA4 property.
-9. Select a property or enter its GA4 Measurement ID.
-
-Use only the client ID in the frontend. **Never put a client secret into `index.html`, `app.html`, `js/config.js`, or any GitHub repository file.**
+If a value is not in the Google tag response (for example `send_page_view` or consent defaults, which live in the website code), add the website URL so the page HTML and its GTM containers can be inspected too.
 
 ---
 
@@ -438,7 +424,7 @@ Run the regression suite before pushing changes:
 npm test
 ```
 
-The current decoder regression suite covers the fixture container, naming, triggers, variables, templates, audit findings, snapshots and input classification.
+The regression suite covers the GTM fixture container (naming, triggers, variables, templates, audit findings, snapshots, input classification), website scanning, and the GA4 Inspector (ID validation, gtm.js request with gtag.js fallback, destination / consent / linker / routing / campaign / cookie parsing, PII redaction, error handling, and a guard that cookie names and library strings are never reported as events).
 
 ---
 
