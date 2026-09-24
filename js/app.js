@@ -307,7 +307,8 @@
         <div class="g-stats">${v.stats.map((s) => `<div><b>${esc(s.value)}</b><span>${esc(s.label)}</span></div>`).join('')}</div></div>
       ${r.status === 'none' ? `<div class="notice warn">No readable public configuration was found for this ID.</div>` : ''}
       ${v.sections.map((sec) => `<div class="g-card g-sec"><div class="g-sec-title">${esc(sec.title)}</div>${sec.rows.map(ga4Row).join('')}</div>`).join('')}
-      <div class="g-foot">Source: public Google tag ${esc(r.source ? r.source.label.replace(/^Google tag response /, '') : '')}${r.payloadBytes ? ' · ' + fmtWeight(r.payloadBytes) : ''}. Private GA4 settings (reports, audiences, custom definitions, retention, links) are not in the public tag and are not shown.${v.other.length ? ` Not decoded: ${esc(v.other.join(', '))}.` : ''}</div>
+      <div class="g-foot">Source: public Google tag ${esc(r.source ? r.source.label.replace(/^Google tag response /, '') : '')}${r.payloadBytes ? ' · ' + fmtWeight(r.payloadBytes) : ''}. Private GA4 settings (reports, audiences, custom definitions, retention, links) are not in the public tag and are not shown.${v.other.length ? ` Not decoded: ${esc(v.other.join(', '))}.` : ''}
+        <details class="raw-tpl"><summary>Show all Google tag settings (${v.raw.length})</summary>${v.raw.map((t) => `<div class="raw-item"><b>${esc(t.label)}</b> <code>${esc(t.fn)}</code><pre>${esc(JSON.stringify(t.params, null, 2))}</pre></div>`).join('')}</details></div>
     </section>`;
   }
 

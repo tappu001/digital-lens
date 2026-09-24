@@ -203,7 +203,24 @@ function fakeFetch(routes, log = []) {
   assert.strictEqual(stat('Cross-domain'), 2);
   assert.strictEqual(stat('Unwanted Referrals'), 11);
   const row = (k) => view.sections.flatMap((x) => x.rows).find((x) => x.key === k);
-  assert.deepStrictEqual(view.sections.map((x) => x.title), ['Events', 'Google tag', 'Data collection']);
+  assert.deepStrictEqual(view.sections.map((x) => x.title), ['Events', 'Google tag', 'Data collection', 'Tag signals', 'Product links']);
+  // templates seen on a live property (G-06MBYRD0J4) are decoded, not reported as unknown
+  const extra = 'var data = {"resource":{"version":"3","macros":[],"tags":[' +
+    '{"function":"__ogt_auto_events","vtp_pageViews":true,"vtp_scrolls":true,"vtp_formInteractions":false},' +
+    '{"function":"__ogt_ga_send","vtp_enabled":false},' +
+    '{"function":"__ogt_data_extract","vtp_rules":["list",["map","name","price"],["map","name","sku"]]},' +
+    '{"function":"__dest_ga","vtp_someSetting":true},' +
+    '{"function":"__ccd_ga_ads_link","vtp_instanceDestinationId":"G-EJPKTC03EM"}]}};';
+  const vx = G.spyView(G.inspectSource(ID, extra));
+  const rx = (k) => vx.sections.flatMap((x) => x.rows).find((x) => x.key === k);
+  assert.deepStrictEqual(vx.other, []);
+  assert.deepStrictEqual(rx('autoevents').chips, ['Page views', 'Scrolls']);
+  assert.strictEqual(rx('uaevents').toggle, false);
+  assert.strictEqual(rx('extract').badges[0], '2 rules');
+  assert.strictEqual(rx('adslink').toggle, true);
+  assert.strictEqual(rx('plads').badges[0], 'Linked');
+  assert.strictEqual(rx('plother').badges[0], 'Not public', 'private product links are never claimed');
+  assert.strictEqual(G.spyView(rThin).sections.flatMap((x) => x.rows).find((x) => x.key === 'adslink').toggle, false);
   assert.ok(row('enhanced').toggle && row('enhanced').chips.includes('Site search') && !row('enhanced').chips.includes('Video engagement'));
   assert.deepStrictEqual(row('create').items[0].lines.slice(0, 2), ['event_name equals page_view', 'page_location contains /thank-you']);
   assert.ok(row('modify').items[0].lines.includes('Set method = email'));
