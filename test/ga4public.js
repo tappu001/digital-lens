@@ -74,7 +74,9 @@ function fakeFetch(routes, log = []) {
 
   // linker / referrals / privacy
   assert.deepStrictEqual(r.linker.domains.map((d) => d.domain), ['example.com', 'checkout.example.com']);
-  assert.deepStrictEqual(r.referralExclusions.map((d) => d.domain), ['paypal.com', 'stripe.com']);
+  // every unwanted-referral rule is kept, including partial matches like "paypal" (4wheelparts.com case: 11 rules)
+  assert.deepStrictEqual(r.referralExclusions.map((d) => d.domain), ['paypal', 'click2buy', 'buy.syf.com', 'mysynchrony', 'dealspotr', 'affirm.com', 'klarna', 'pricemole', '4wheelparts.com', 'tcapi.io', 'shop.app']);
+  assert.strictEqual(r.referralExclusions[2].rule, 'buy\\.syf\\.com', 'raw rule kept');
   const field = (f) => r.fields.find((x) => x.field === f);
   assert.strictEqual(field('google_signals').display, 'ENABLED');
   assert.ok(r.fields.some((f) => f.field === 'region_control.device_and_geo' && /DE,FR/.test(f.display)));
@@ -199,7 +201,7 @@ function fakeFetch(routes, log = []) {
   assert.strictEqual(stat('Create Events'), 1);
   assert.strictEqual(stat('Modify Events'), 1);
   assert.strictEqual(stat('Cross-domain'), 2);
-  assert.strictEqual(stat('Unwanted Referrals'), 2);
+  assert.strictEqual(stat('Unwanted Referrals'), 11);
   const row = (k) => view.sections.flatMap((x) => x.rows).find((x) => x.key === k);
   assert.deepStrictEqual(view.sections.map((x) => x.title), ['Events', 'Google tag', 'Data collection']);
   assert.ok(row('enhanced').toggle && row('enhanced').chips.includes('Site search') && !row('enhanced').chips.includes('Video engagement'));

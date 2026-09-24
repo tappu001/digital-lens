@@ -8,8 +8,14 @@
 
   let settings = TSD.settings.get();
   const track = (fn, ...a) => { try { TSD.track && TSD.track[fn] && TSD.track[fn](...a); } catch (e) {} };
-  const state = { result: null, ci: 0, view: 'tags', q: '', filter: 'all', sev: 'all', sort: { key: 'name', dir: 1 }, stack: [], lastInput: '', mode: 'home', ga4: { report: null, id: '', input: '', loading: false, error: '', open: {}, choices: null } };
+  const state = { ci: 0, view: 'tags', q: '', filter: 'all', sev: 'all', sort: { key: 'name', dir: 1 }, stack: [], lastInput: '', mode: 'home', ga4: { report: null, id: '', input: '', loading: false, error: '', open: {}, choices: null } };
 
+  // GTM Audit and Website Insights keep separate results, so switching tabs never mixes them.
+  state.results = { gtm: null, website: null };
+  state.inputs = { gtm: '', website: '' };
+  const slot = (m) => (m === 'website' ? 'website' : 'gtm');
+  Object.defineProperty(state, 'result', { get: () => state.results[slot(state.mode)], set: (v) => { state.results[slot(state.mode)] = v; } });
+  Object.defineProperty(state, 'lastInput', { get: () => state.inputs[slot(state.mode)], set: (v) => { state.inputs[slot(state.mode)] = v; } });
   const C = () => state.result && state.result.containers[state.ci];
   const style = () => settings.style;
   const tagName = (t) => t.names[style()];
@@ -83,23 +89,21 @@
       try { inputType = TSD.scan.classifyInput(payload.input).kind; } catch (e) { inputType = 'unknown'; }
     }
     track('decodeStarted', inputType);
+    const runSlot = slot(state.mode);
     try {
       const result = await TSD.scan.runScan(payload, TSD.net.fetchText);
-      state.result = result;
+      result.scannedAt = new Date().toISOString();
+      state.results[runSlot] = result;
+      if (slot(state.mode) !== runSlot) return;
       state.ci = 0;
       state.q = '';
       state.filter = 'all';
       state.view = result.containers.length ? 'tags' : 'scan';
       state.stack = [];
       closeSheet();
-      if (payload.input) {
-        state.lastInput = payload.input;
-        remember(payload.input);
-        history.replaceState(null, '', `#q=${encodeURIComponent(payload.input)}`);
-      } else {
-        state.lastInput = '';
-        history.replaceState(null, '', location.pathname + location.search);
-      }
+      state.inputs[runSlot] = payload.input || '';
+      if (payload.input) remember(payload.input);
+      syncHash(true);
       const errs = result.errors || [];
       if (errs.length) notice(`Some containers couldn't be decoded:<ul>${errs.map((e) => `<li><b>${esc(e.id)}</b>: ${esc(e.message)}</li>`).join('')}</ul>`, 'warn');
       const c0 = result.containers[0];
@@ -133,23 +137,66 @@
     decode({ input: v });
   });
 
-  function setMode(mode) {
+  function setMode(mode, fromRoute) {
     state.mode = mode;
     state.view = mode === 'gtm' ? 'tags' : mode === 'website' ? 'scan' : 'tags';
     document.querySelectorAll('.mode-tab').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
     const form = $('#decodeForm');
     const q = $('#q');
     const btn = $('#decodeBtn');
-    const showSearch = mode === 'gtm' || mode === 'website';
+    const showSearch = mode === 'gtm';
     form.hidden = !showSearch;
     if (mode === 'gtm') { q.placeholder = 'GTM-XXXXXXX or https://example.com'; btn.textContent = 'Audit GTM'; }
     if (mode === 'website') { q.placeholder = 'https://example.com'; btn.textContent = 'Scan website'; }
     notice('');
     if (mode === 'home') { q.placeholder = 'Choose an audit above'; }
+    q.value = mode === 'gtm' ? state.inputs.gtm : '';
+    closeSheet();
     render();
+    if (!fromRoute) { syncHash(true); window.scrollTo(0, 0); }
   }
-  document.querySelectorAll('.mode-tab').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
-  document.addEventListener('click', (e) => { const b=e.target.closest('[data-mode]'); if(b && !b.classList.contains('mode-tab')) setMode(b.dataset.mode); });
+  document.addEventListener('click', (e) => { const b = e.target.closest('[data-mode]'); if (b) { e.preventDefault(); setMode(b.dataset.mode); } });
+
+  // ---------- routing ----------
+  // Each workspace has its own address, so browser back/forward, refresh and shared links work:
+  //   #home  #gtm?q=GTM-XXXX&view=triggers  #ga4?id=G-XXXX  #website?url=https://example.com
+  function routeHash() {
+    const m = state.mode;
+    if (m === 'gtm') {
+      const q = state.inputs.gtm;
+      return q ? `#gtm?q=${encodeURIComponent(q)}${state.view && state.view !== 'tags' ? '&view=' + state.view : ''}` : '#gtm';
+    }
+    if (m === 'ga4') return state.ga4.report ? `#ga4?id=${encodeURIComponent(state.ga4.report.measurementId)}` : '#ga4';
+    if (m === 'website') return state.inputs.website && state.results.website ? `#website?url=${encodeURIComponent(state.inputs.website)}` : '#website';
+    return '#home';
+  }
+  function syncHash(push) {
+    const h = routeHash();
+    if (location.hash === h) return;
+    history[push ? 'pushState' : 'replaceState'](null, '', h);
+  }
+  function applyRoute() {
+    const h = location.hash || '#home';
+    const legacy = /^#q=([^&]+)/.exec(h);
+    if (legacy) {
+      const v = decodeURIComponent(legacy[1]);
+      if (/^(G|GT|AW|DC)-[A-Z0-9]{4,15}$/i.test(v)) { setMode('ga4', true); ga4Load(v); } else { setMode('gtm', true); decode({ input: v }); }
+      return;
+    }
+    const m = /^#(home|gtm|ga4|website)(?:\?(.*))?$/.exec(h);
+    const mode = m ? m[1] : 'home';
+    const p = new URLSearchParams(m && m[2] ? m[2] : '');
+    setMode(mode, true);
+    if (mode === 'gtm' && p.get('q')) {
+      const q = p.get('q');
+      $('#q').value = q;
+      if (state.inputs.gtm !== q || !state.results.gtm) decode({ input: q }).then(() => { if (p.get('view')) { state.view = p.get('view'); render(); } });
+      else if (p.get('view')) { state.view = p.get('view'); render(); }
+    }
+    if (mode === 'ga4' && p.get('id') && (!state.ga4.report || state.ga4.report.measurementId !== p.get('id').toUpperCase())) ga4Load(p.get('id'));
+    if (mode === 'website' && p.get('url') && (state.inputs.website !== p.get('url') || !state.results.website)) decode({ input: p.get('url') });
+  }
+  window.addEventListener('popstate', applyRoute);
 
   // recent
   const getRecent = () => { try { return JSON.parse(localStorage.getItem('tsd-recent') || '[]'); } catch (e) { return []; } };
@@ -216,11 +263,11 @@
   }
 
   function viewWebsiteLanding() {
-    return `<section class="module-home"><div class="module-kicker">WEBSITE INSIGHTS</div><h1>What is installed on this website?</h1><p>Scan the site independently from GTM and GA4. Digital Lens separates on-page technologies from tracking found through GTM.</p><div class="module-input-card"><div class="input-big"><span>↗</span><input id="websiteQuick" placeholder="https://example.com" value="${esc(state.lastInput && /^https?:\/\//i.test(state.lastInput) ? state.lastInput : '')}"><button class="btn-primary" id="websiteQuickBtn">Scan website</button></div><div class="small muted">Public website scan only. No account access required.</div></div></section>`;
+    return `<section class="module-home"><div class="module-kicker">WEBSITE INSIGHTS</div><h1>What is installed on this website?</h1><p>Scan the site independently from GTM and GA4. Digital Lens separates on-page technologies from tracking found through GTM.</p><div class="module-input-card"><div class="input-big"><span>↗</span><input id="websiteQuick" placeholder="https://example.com" value="${esc(state.inputs.website)}"><button class="btn-primary" id="websiteQuickBtn">Scan website</button></div><div class="small muted">Public website scan only. No account access required.</div></div></section>`;
   }
 
   function viewWebsiteOnly() {
-    return `<section class="module-results"><div class="module-head"><div><div class="module-kicker">WEBSITE INSIGHTS</div><h1>Website technology & tracking</h1><p>${esc(state.result.site.url)}</p></div><button class="btn-outline" data-mode="website">Scan another site</button></div>${siteCard(state.result.site, state.result.containers || [])}</section>`;
+    return `<section class="module-results"><div class="module-head"><div><div class="module-kicker">WEBSITE INSIGHTS</div><h1>${esc(state.result.site.url.replace(/^https?:\/\//, '').replace(/\/$/, ''))}</h1><p>Scanned ${esc(new Date(state.result.scannedAt || Date.now()).toLocaleString())}</p></div><button class="btn-outline" data-act="new-site">Scan another site</button></div>${siteCard(state.result.site, state.result.containers || [])}</section>`;
   }
 
   // ---------- GA4 Inspector ----------
@@ -277,7 +324,7 @@
       try {
         g.report = await TSD.ga4public.inspect(v.id, TSD.net.fetchText, {});
         g.open = {};
-        history.replaceState(null, '', `#ga4?id=${encodeURIComponent(v.id)}`);
+        syncHash(true);
         track('decodeSuccess', { input_type: 'ga4_inspector', container_id: v.id, status: g.report.status });
       } catch (e) {
         g.report = null;
@@ -319,168 +366,49 @@
     });
   }
 
-  function collectGtmPlatformIds(containers) {
-    const out = {};
-    const add = (name, id) => {
-      if (id == null) return;
-      const value = String(id).trim();
-      if (!value || /^(undefined|null|true|false)$/i.test(value)) return;
-      (out[name] || (out[name] = new Set())).add(value);
-    };
-    const valuesForKeys = (obj, keys) => {
-      const found = [];
-      const walk = (value, key) => {
-        if (value == null) return;
-        if (typeof value === 'string' || typeof value === 'number') {
-          if (keys.includes(String(key).toLowerCase())) found.push(String(value));
-          return;
-        }
-        if (Array.isArray(value)) return value.forEach((x) => walk(x, key));
-        Object.entries(value).forEach(([k, v]) => walk(v, k));
-      };
-      walk(obj, '');
-      return found;
-    };
-    const rules = {
-      'Meta Pixel': { keys: ['pixelid', 'pixel_id', 'facebookpixelid', 'facebook_pixel_id'], re: /fbq\s*\(\s*['"]init['"]\s*,\s*['"]([0-9]{10,20})['"]/gi },
-      'TikTok Pixel': { keys: ['pixelcode', 'pixel_code', 'pixelid', 'pixel_id', 'tiktokpixelid'], re: /ttq\.load\s*\(\s*['"]([A-Za-z0-9_-]{8,40})['"]/gi },
-      'Snapchat Pixel': { keys: ['pixelid', 'pixel_id', 'snappixelid', 'snapchatpixelid'], re: /snaptr\s*\(\s*['"]init['"]\s*,\s*['"]([^'"]{8,80})['"]/gi },
-      'Pinterest Tag': { keys: ['tagid', 'tag_id', 'pixelid', 'pixel_id', 'pinteresttagid'], re: /pintrk\s*\(\s*['"]load['"]\s*,\s*['"]?([0-9]{6,20})/gi },
-      'LinkedIn Insight': { keys: ['partnerid', 'partner_id', 'conversionid', 'conversion_id', 'linkedinpartnerid'], re: /_linkedin_partner_id\s*=\s*['"]?([0-9]{4,20})/gi },
-      'Microsoft UET': { keys: ['tagid', 'tag_id', 'uettagid', 'uet_tag_id'], re: /(?:tag[_ -]?id|uet[_ -]?tag[_ -]?id)\s*[:=]\s*['"]?([A-Za-z0-9-]{6,40})/gi },
-      'Microsoft Clarity': { keys: ['projectid', 'project_id', 'clarityid', 'clarity_id'], re: /clarity[_ -]?(?:project[_ -]?)?id\s*[:=]\s*['"]?([A-Za-z0-9_-]{6,40})/gi },
-      'Hotjar': { keys: ['siteid', 'site_id', 'hotjarid', 'hjid'], re: /(?:hjid|hotjar[_ -]?(?:site[_ -]?)?id)\s*[:=]\s*([0-9]{4,12})/gi },
-      'MoEngage': { keys: ['appid', 'app_id', 'moeappid', 'workspaceid', 'workspace_id'], re: /(?:moe[_ -]?app[_ -]?id|moengage[_ -]?(?:app[_ -]?)?id)\s*[:=]\s*['"]?([A-Za-z0-9_-]{6,40})/gi },
-      'Klaviyo': { keys: ['publicapikey', 'siteid', 'companyid', 'klaviyoid'], re: /(?:klaviyo[_ -]?(?:public[_ -]?api[_ -]?key|site[_ -]?id)|public[_ -]?api[_ -]?key)\s*[:=]\s*['"]?([A-Za-z0-9_-]{8,60})/gi }
-    };
-    const aliases = {
-      'Google Analytics 4 / Google tag': 'GA4',
-      'Google Ads Conversion Tracking': 'Google Ads',
-      'Google Ads Remarketing': 'Google Ads',
-      'Google Ads Calls from Website': 'Google Ads',
-      'Google Ads User-Provided Data Event': 'Google Ads',
-      'Microsoft Advertising UET': 'Microsoft UET',
-      'X (Twitter) Base Pixel': 'X (Twitter) Pixel'
-    };
-    (containers || []).forEach((c) => {
-      (c.summary?.ga4Ids || []).forEach((id) => add('GA4', id));
-      (c.summary?.adsIds || []).forEach((id) => add('Google Ads', id));
-      (c.tags || []).forEach((t) => {
-        const raw = JSON.stringify(t.raw || {}) + ' ' + JSON.stringify(t.paramsObj || {}) + ' ' + String(t.html || '');
-        (t.platforms || []).forEach((platform) => {
-          const name = aliases[platform] || platform;
-          const rule = rules[name];
-          if (!rule) return;
-          valuesForKeys(t.paramsObj, rule.keys).forEach((id) => add(name, id));
-          rule.re.lastIndex = 0;
-          let m;
-          while ((m = rule.re.exec(raw))) add(name, m[1]);
-        });
-        const r = t.raw || {};
-        ['tagId', 'measurementId', 'measurementIdOverride'].forEach((key) => {
-          const value = r['vtp_' + key];
-          if (typeof value === 'string') {
-            if (/^G-/i.test(value)) add('GA4', value.toUpperCase());
-            if (/^AW-/i.test(value)) add('Google Ads', value.toUpperCase());
-          }
-        });
-        if (t.fn === '__awct' || t.fn === '__sp') {
-          const value = r.vtp_conversionId;
-          if (typeof value === 'string' || typeof value === 'number') {
-            const id = String(value);
-            add('Google Ads', /^AW-/i.test(id) ? id.toUpperCase() : 'AW-' + id);
-          }
-        }
-      });
-    });
-    return Object.fromEntries(Object.entries(out).map(([name, ids]) => [name, [...ids].slice(0, 10)]));
+  function whereBadge(w) { return w === 'On page' ? '<span class="wb page">On page</span>' : `<span class="wb gtm">${esc(w)}</span>`; }
+  function idCode(i) {
+    const inspect = /^G-[A-Z0-9]+$/.test(i.id) ? ` data-inspect-ga4="${esc(i.id)}" title="Open in GA4 Inspector" role="button" tabindex="0"` : '';
+    return `<span class="idc${inspect ? ' link' : ''}"${inspect}><code>${esc(i.id)}</code><small>${esc(i.where.join(' · '))}</small></span>`;
   }
 
   function siteCard(site, containers) {
-    const loadLabel = (ms) => ms == null ? '<span class="muted">—</span>' : ms < 300 ? `<span style="color:var(--green,#1e8e3e)">${ms}ms ✓</span>` : ms < 800 ? `<span style="color:var(--amber,#b06000)">${ms}ms</span>` : `<span style="color:var(--red,#c5221f)">${ms}ms ⚠</span>`;
-    const chip2 = (txt, sub) => `<span class="chip plain" style="font-size:12px;padding:3px 10px">${esc(txt)}${sub ? `<span style="color:var(--text-3);margin-left:6px;font-weight:400">${esc(sub)}</span>` : ''}</span>`;
-    const detectedIntegrations = site.integrations || [];
-    const integrationGroups = {};
-    detectedIntegrations.forEach((x) => { (integrationGroups[x.category] || (integrationGroups[x.category] = [])).push(x); });
-    const integrationOrder = ['Analytics', 'Product Analytics', 'Advertising', 'Tag Management', 'Session Replay', 'Experimentation', 'Marketing Automation', 'Customer Data', 'Customer Engagement', 'Customer Support', 'Consent'];
-    const integrationHtml = integrationOrder.filter((k) => integrationGroups[k]).map((k) => {
-      return '<div class="integration-group"><div class="integration-group-title">' + esc(k) + '</div><div class="integration-list">' + integrationGroups[k].map((x) => '<div class="integration-item"><div class="integration-name"><b>' + esc(x.name) + '</b><span class="integration-evidence">' + esc(x.evidence) + '</span></div><div class="integration-ids">' + (x.ids.length ? x.ids.map((id) => '<code>' + esc(id) + '</code>').join(' ') : '<span class="none">No public ID detected</span>') + '</div></div>').join('') + '</div></div>';
-    }).join('');
-    const detectedCount = detectedIntegrations.length;
-    const onPageIds = site.onPageIds || {};
-    const onPagePlatforms = site.onPagePlatforms || site.platforms || [];
-    const onPageHtml = onPagePlatforms.length
-      ? onPagePlatforms.map(p => { const ids = onPageIds[p.name]; return chip2(p.name, ids ? ids.join(', ') : ''); }).join(' ')
-      : '<span class="none">None detected</span>';
-    const gtmPlatforms = {};
-    (containers || []).forEach(c => { (c.summary.platforms || []).forEach(p => { gtmPlatforms[p.name] = (gtmPlatforms[p.name] || 0) + p.count; }); });
-    const gtmIds = collectGtmPlatformIds(containers);
-    const gtmPlatHtml = Object.keys(gtmPlatforms).length
-      ? Object.entries(gtmPlatforms).map(([name, cnt]) => {
-          const ids = gtmIds[name] || [];
-          return chip2(name, (cnt > 1 ? cnt + ' tags' : '') + (ids.length ? ' · ' + ids.join(', ') : ''));
-        }).join(' ')
-      : '<span class="none">None detected</span>';
+    const inv = TSD.inventory.build(site, containers);
+    const t = inv.totals;
     const loadTimes = site.gtmLoadMs || {};
-    const verification = site.gtmVerification || {
-      candidates: site.gtmCandidates ? site.gtmCandidates.length : site.gtmIds.length,
-      verified: site.gtmIds.length,
-      unverified: site.unverifiedGtmIds ? site.unverifiedGtmIds.length : 0,
-      ignoredPlaceholders: site.ignoredGtmIds ? site.ignoredGtmIds.length : 0,
-    };
-    const loadHtml = site.gtmIds.length
-      ? site.gtmIds.map(id => `<span style="margin-right:16px"><b style="font-family:monospace;font-size:13px">${esc(id)}</b> ${loadLabel(loadTimes[id])}</span>`).join('')
-      : '<span class="none">No verified GTM containers</span>';
-    const statusParts = [
-      `${verification.verified} verified`,
-      verification.unverified ? `${verification.unverified} unverified` : '',
-      verification.ignoredPlaceholders ? `${verification.ignoredPlaceholders} placeholder ignored` : '',
-    ].filter(Boolean);
-    const notes = [...(site.notes || [])];
-    if (site.unverifiedGtmIds && site.unverifiedGtmIds.length) {
-      notes.unshift(`Unverified GTM-like reference(s) were excluded from the published container list: ${site.unverifiedGtmIds.length}`);
-    }
     const techs = site.technologies || [];
-    const techHtml = techs.length ? techs.map((t) => chip2(t.name, t.category)).join(' ') : '<span class="none">No specific CMS, ecommerce platform or framework signature detected</span>';
-    const cmds = site.gtagCommands || [];
-    const consentCmds = cmds.filter((c) => c.command === 'consent');
-    const showVal = (v) => (v && typeof v === 'object' ? (v.dynamic ? 'set at runtime' : JSON.stringify(v)) : String(v));
-    const consentHtml = consentCmds.length ? consentCmds.map((c) => `<div class="small"><b>${esc(c.mode === 'default' ? 'Default' : 'Update')}</b> · ${Object.entries(c.params).map(([k, v]) => `${esc(k)}: ${esc(showVal(v))}`).join(' · ')}</div>`).join('') : '<span class="none">No gtag(\'consent\') call in the page HTML</span>';
-    const ga4OnPage = [...new Set([...(site.hardcodedGtag || []), ...(site.gtagConfigCalls || [])])].filter((id) => /^(G|GT|AW|DC)-/.test(id));
-    const gtmGa4 = [...new Set((containers || []).flatMap((c) => c.summary.ga4Ids || []))];
-    const inspectLinks = [...new Set([...ga4OnPage, ...gtmGa4])].filter((id) => /^G-/.test(id));
-    return `<div class="card" style="margin-bottom:16px"><div class="card-head"><h2>Website Insights</h2><span class="muted small">${esc(site.url)}</span></div><div class="card-body">
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px 28px;margin-bottom:16px">
-        <div><div class="muted small" style="margin-bottom:4px">Built with</div><div style="font-weight:500">${esc(site.sitePlatform || 'Unknown')}</div></div>
-        <div><div class="muted small" style="margin-bottom:4px">Verified GTM containers</div><div>${site.gtmIds.length ? site.gtmIds.map(id => chip2(id, 'published')).join(' ') : '<span class="none">None verified</span>'}</div></div>
-        <div><div class="muted small" style="margin-bottom:4px">GTM verification</div><div class="small">${esc(statusParts.join(' · ') || 'No GTM references detected')}</div></div>
-        <div><div class="muted small" style="margin-bottom:4px">GTM load time</div><div>${loadHtml}</div></div>
+    const v = site.gtmVerification || {};
+    const consent = (site.gtagCommands || []).filter((c) => c.command === 'consent');
+    const count = (r) => [r.onPage ? `On page ×${r.onPage.count}` : '', ...r.gtm.map((g) => (g.tags ? `${g.containerId}: ${g.tags} tag${g.tags === 1 ? '' : 's'}${g.paused ? ` (${g.paused} paused)` : ''}` : `${g.containerId}: server URL`))].filter(Boolean);
+    let lastCat = '';
+    const rows = inv.rows.map((r) => {
+      const head = r.category !== lastCat ? `<tr class="cat-row"><td colspan="4">${esc(r.category)}</td></tr>` : '';
+      lastCat = r.category;
+      return `${head}<tr>
+        <td><b>${esc(r.name)}</b></td>
+        <td class="ids">${r.ids.length ? r.ids.map(idCode).join('') : '<span class="none">No ID exposed</span>'}</td>
+        <td>${r.where.map(whereBadge).join(' ')}</td>
+        <td class="cnt">${count(r).map((x) => `<div>${esc(x)}</div>`).join('')}</td>
+      </tr>`;
+    }).join('');
+    return `<div class="w-sum">
+        <div><span class="lbl">Built with</span><b>${esc(techs.filter((x) => /CMS|Ecommerce|builder/.test(x.category)).map((x) => x.name).join(', ') || site.sitePlatform || 'Unknown')}</b></div>
+        <div><span class="lbl">GTM containers</span><b>${site.gtmIds.length ? site.gtmIds.map((id) => `${esc(id)}${loadTimes[id] != null ? ` <small>${loadTimes[id]} ms</small>` : ''}`).join(', ') : 'None found'}</b></div>
+        <div><span class="lbl">Platforms</span><b>${t.platforms}</b></div>
+        <div><span class="lbl">On page only</span><b>${t.onPageOnly}</b></div>
+        <div><span class="lbl">Via GTM only</span><b>${t.gtmOnly}</b></div>
+        <div><span class="lbl">On page + GTM</span><b>${t.both}</b></div>
       </div>
-      <div class="site-sec">
-        <div class="site-sec-title">TECHNOLOGY</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px">${techHtml}</div>
+      <div class="card list-card"><div class="list-head"><div><h2>Platforms on this website</h2><div class="small muted">Where each tool is implemented, how many times, and its IDs</div></div></div>
+        ${inv.rows.length ? `<div class="table-scroll"><table class="grid inv"><thead><tr><th>Platform</th><th>IDs</th><th>Implemented</th><th>Count</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty"><b>No marketing or analytics platforms found</b>The page HTML and its GTM containers did not contain a known platform.</div>'}
       </div>
-      <div class="site-sec">
-        <div class="site-sec-title">GOOGLE TAG ON THE PAGE</div>
-        <div class="small" style="margin-bottom:6px">${ga4OnPage.length ? 'Hardcoded Google tag IDs: ' + ga4OnPage.map((id) => `<code>${esc(id)}</code>`).join(' ') : '<span class="none">No hardcoded gtag.js / gtag(\'config\') found</span>'}</div>
-        ${consentHtml}
-        ${inspectLinks.length ? `<div class="inspect-links">${inspectLinks.map((id) => `<button type="button" class="btn-outline" data-inspect-ga4="${esc(id)}" data-site="${esc(site.url)}">Inspect ${esc(id)} in GA4 Inspector →</button>`).join('')}</div>` : ''}
-      </div>
-      <div style="border-top:1px solid var(--line-2,#e0e0e0);padding-top:14px;margin-bottom:12px">
-        <div class="muted small" style="margin-bottom:8px;font-weight:600;letter-spacing:.04em">ON-PAGE / HARDCODED</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px">${onPageHtml}</div>
-      </div>
-      <div style="border-top:1px solid var(--line-2,#e0e0e0);padding-top:14px">
-        <div class="muted small" style="margin-bottom:8px;font-weight:600;letter-spacing:.04em">GTM INTEGRATED PLATFORMS</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px">${gtmPlatHtml}</div>
-      </div>
-      <div style="border-top:1px solid var(--line-2,#e0e0e0);padding-top:16px;margin-top:16px">
-        <div class="card-head" style="padding:0 0 10px"><h2>Detected marketing &amp; analytics stack</h2><span class="muted small">${detectedCount} technologies</span></div>
-        ${integrationHtml || '<div class="empty" style="padding:24px 8px">No known marketing or analytics signatures detected in the HTML.</div>'}
-        <div class="small muted" style="margin-top:14px">GTM platforms are derived from the decoded container configuration, including built-in tags, Custom HTML, and custom/community templates. IDs are shown only when they can be identified from the tag configuration. Static website detection is separate and does not imply that a platform is firing at runtime.</div>
-      </div>
-      ${notes.length ? `<ul class="hint" style="margin-top:14px">${notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
-    </div></div>`;
+      <div class="card"><div class="card-head"><h2>Website details</h2></div><div class="card-body"><dl class="kv-list">
+        <dt>Technology</dt><dd>${techs.length ? techs.map((x) => `<span class="chip plain">${esc(x.name)} <span class="muted">${esc(x.category)}</span></span>`).join(' ') : '<span class="none">No specific signature found</span>'}</dd>
+        <dt>Consent mode</dt><dd>${consent.length ? consent.map((c) => `<div><b>${c.mode === 'default' ? 'Default' : 'Update'}:</b> ${esc(Object.entries(c.params).map(([k, val]) => `${k} ${val && typeof val === 'object' ? 'set at runtime' : val}`).join(', '))}</div>`).join('') : '<span class="none">No gtag(\'consent\') call in the page HTML</span>'}</dd>
+        ${(site.unverifiedGtmIds || []).length || (site.ignoredGtmIds || []).length ? `<dt>Not counted</dt><dd>${esc([...(site.unverifiedGtmIds || []).map((x) => `${x} (not a published container)`), ...(site.ignoredGtmIds || []).map((x) => `${x} (placeholder)`)].join(', '))}</dd>` : ''}
+      </dl>
+      <p class="small muted" style="margin:12px 0 0">"On page" means the tool is written directly in the website's HTML. GTM means it is a tag inside that published container. Tools added only after the page runs JavaScript (or by Shopify customer events) cannot be seen in the HTML.${v.unverified ? '' : ''}</p>
+      </div></div>`;
   }
 
   function viewScanOnly() {
@@ -615,8 +543,8 @@
 
   function viewStats(c) {
     const s = c.summary;
-    const ids = collectGtmPlatformIds([c]);
-    if (s.serverUrls.length) ids['Server container'] = s.serverUrls;
+    const ids = {};
+    TSD.inventory.build(null, [c]).rows.forEach((r) => { if (r.ids.length) ids[r.name] = r.ids.map((x) => x.id); });
     const count = (list, key) => { const o = {}; list.forEach((x) => { const k = key(x); o[k] = (o[k] || 0) + 1; }); return Object.entries(o).sort((a, b) => b[1] - a[1]); };
     const bars = (rows, title) => {
       const max = Math.max(1, ...rows.map((r) => r[1]));
@@ -800,7 +728,7 @@
       openSheet(open.dataset.open, inSheet);
       return;
     }
-    if (view) { state.view = view.dataset.view; state.q = ''; state.filter = 'all'; state.sort = { key: 'name', dir: 1 }; track('viewChanged', state.view); render(); window.scrollTo(0, 0); return; }
+    if (view) { state.view = view.dataset.view; state.q = ''; state.filter = 'all'; state.sort = { key: 'name', dir: 1 }; track('viewChanged', state.view); render(); syncHash(false); window.scrollTo(0, 0); return; }
     if (sort) { const k = sort.dataset.sort; state.sort = state.sort.key === k ? { key: k, dir: -state.sort.dir } : { key: k, dir: 1 }; render(); return; }
     if (sev) { state.sev = sev.dataset.sev; render(); return; }
     if (recent) { $('#q').value = recent.dataset.recent; decode({ input: recent.dataset.recent }); return; }
@@ -828,12 +756,15 @@
       if (a === 'csv' && c) { track('exportUsed', 'csv', state.view); } if (a === 'csv' && c) download(`${fileBase(c)}_${state.view}.csv`, '\ufeff' + tableFor(state.view, c).map((r) => r.map((v) => cell(v, ',')).join(',')).join('\n'), 'text/csv');
       if (a === 'copy' && c) track('exportUsed', 'copy_sheets', state.view); if (a === 'copy' && c) copyText(tableFor(state.view, c).map((r) => r.map((v) => cell(v, '\t')).join('\t')).join('\n'), act, 'Copy for Sheets');
       if (a === 'json' && c) track('exportUsed', 'json', state.view); if (a === 'json' && c) download(`${fileBase(c)}_config.json`, JSON.stringify(c.rawConfig, null, 2), 'application/json');
-      if (a === 'share' && state.lastInput) copyText(`${location.origin}${location.pathname}#q=${encodeURIComponent(state.lastInput)}`, act, 'Copy share link');
+      if (a === 'share' && state.lastInput) copyText(`${location.origin}${location.pathname}${routeHash()}`, act, 'Share');
+      if (a === 'new-site') { state.results.website = null; state.inputs.website = ''; render(); syncHash(true); }
     }
   });
 
   $('#scrim').addEventListener('click', closeSheet);
   document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target && e.target.id === 'websiteQuick') { e.preventDefault(); const b = $('#websiteQuickBtn'); if (b) b.click(); return; }
+    if (e.key === 'Enter' && e.target && e.target.matches && e.target.matches('[data-inspect-ga4]')) { e.target.click(); return; }
     if (e.key === 'Escape' && !$('#sheet').hidden) {
       if (state.stack.length > 1) { state.stack.pop(); renderSheet(); } else closeSheet();
     }
@@ -916,19 +847,5 @@
 
   // ---------- start ----------
   render();
-  refreshBackend().then(() => {
-    const m = /#q=([^&]+)/.exec(location.hash);
-    const modeMatch = /^#(gtm|ga4|website)\b/.exec(location.hash);
-    if (modeMatch) setMode(modeMatch[1]);
-    if (modeMatch && modeMatch[1] === 'ga4') {
-      const p = new URLSearchParams(location.hash.replace(/^#ga4\??/, ''));
-      if (p.get('id')) ga4Load(p.get('id'));
-      return;
-    }
-    if (m) {
-      const v = decodeURIComponent(m[1]);
-      $('#q').value = v;
-      if (/^(G|GT|AW|DC)-[A-Z0-9]{4,15}$/i.test(v)) { setMode('ga4'); ga4Load(v); } else decode({ input: v });
-    }
-  });
+  refreshBackend().then(applyRoute);
 })();
