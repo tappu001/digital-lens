@@ -12,13 +12,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Digital Lens™ — Tracking Intelligence</title>
   <meta name="author" content="Tapasvi Dudhrejiya">
-  <meta name="description" content="Decode any published Google Tag Manager container into readable tags, triggers, and variables, with audit findings.">
+  <meta name="description" content="Inspect published GTM containers, public Google tag / GA4 configuration and website tracking, with evidence for every detected value.">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles.css?v=20260923">
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <link rel="stylesheet" href="assets/styles.css?v=20260924.1">
 </head>
 <body>
   <!-- Google Tag Manager (noscript) -->
@@ -52,7 +51,7 @@
   <div class="modebar" id="modebar" aria-label="Audit modes">
     <button type="button" class="mode-tab active" data-mode="home"><span>⌂</span>Workspace</button>
     <button type="button" class="mode-tab" data-mode="gtm"><span>◈</span>GTM Audit</button>
-    <button type="button" class="mode-tab" data-mode="ga4"><span>◉</span>GA4 Audit</button>
+    <button type="button" class="mode-tab" data-mode="ga4"><span>◉</span>GA4 Inspector</button>
     <button type="button" class="mode-tab" data-mode="website"><span>◌</span>Website Insights</button>
   </div>
 
@@ -96,18 +95,12 @@
 
       <fieldset class="field">
         <legend>Fetch proxy</legend>
-        <p class="muted small">Needed on the hosted version so the browser can read gtm.js. Paste your Cloudflare Worker URL (see DEPLOY.md). Leave empty when using the local server.</p>
+        <p class="muted small">Needed on the hosted version so the browser can read gtm.js, gtag.js and website HTML. Paste your Cloudflare Worker URL (see DEPLOY.md). Leave empty when using the local server.</p>
         <div class="inline">
           <input type="url" id="proxyUrl" placeholder="https://your-worker.your-subdomain.workers.dev">
           <button type="button" class="btn-outline" id="testProxy">Test</button>
         </div>
         <p class="small" id="proxyResult"></p>
-      </fieldset>
-
-      <fieldset class="field">
-        <legend>GA4 connection</legend>
-        <p class="muted small">The GA4 audit uses a Google OAuth Web Client ID. Only the public client ID belongs in this app; never add a client secret.</p>
-        <input type="text" id="ga4ClientIdSetting" placeholder="1234567890-xxxxxxxx.apps.googleusercontent.com">
       </fieldset>
 
       <fieldset class="field">
@@ -139,20 +132,20 @@
     </span>
   </footer>
 
-  <script src="js/config.js?v=20260923"></script>
-  <script src="js/core/catalog.js?v=20260923"></script>
-  <script src="js/core/parser.js?v=20260923"></script>
-  <script src="js/core/naming.js?v=20260923"></script>
-  <script src="js/core/decoder.js?v=20260923"></script>
-  <script src="js/core/audit.js?v=20260923"></script>
-  <script src="js/core/sitescan.js?v=20260923"></script>
-  <script src="js/core/snapshots.js?v=20260923"></script>
-  <script src="js/core/ga4.js?v=20260923"></script>
-  <script src="js/core/scan.js?v=20260923"></script>
-  <script src="js/settings.js?v=20260923"></script>
-  <script src="js/net.js?v=20260923"></script>
-  <script src="js/icons.js?v=20260923"></script>
-  <script src="js/analytics.js?v=20260923"></script>
-  <script src="js/app.js?v=20260923.3"></script>
+  <script src="js/config.js?v=20260924.1"></script>
+  <script src="js/core/catalog.js?v=20260924.1"></script>
+  <script src="js/core/parser.js?v=20260924.1"></script>
+  <script src="js/core/naming.js?v=20260924.1"></script>
+  <script src="js/core/decoder.js?v=20260924.1"></script>
+  <script src="js/core/audit.js?v=20260924.1"></script>
+  <script src="js/core/sitescan.js?v=20260924.1"></script>
+  <script src="js/core/snapshots.js?v=20260924.1"></script>
+  <script src="js/core/scan.js?v=20260924.1"></script>
+  <script src="js/core/ga4public.js?v=20260924.1"></script>
+  <script src="js/settings.js?v=20260924.1"></script>
+  <script src="js/net.js?v=20260924.1"></script>
+  <script src="js/icons.js?v=20260924.1"></script>
+  <script src="js/analytics.js?v=20260924.1"></script>
+  <script src="js/app.js?v=20260924.1"></script>
 </body>
 </html>
