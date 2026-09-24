@@ -8,7 +8,7 @@
 
   let settings = TSD.settings.get();
   const track = (fn, ...a) => { try { TSD.track && TSD.track[fn] && TSD.track[fn](...a); } catch (e) {} };
-  const state = { result: null, ci: 0, view: 'overview', q: '', filter: 'all', sev: 'all', sort: { key: 'name', dir: 1 }, stack: [], lastInput: '', mode: 'home', ga4: { audit: null, propertyId: '', loading: false, connected: false, section: 'overview', error: '', properties: [] }, ga4public: { data: null, measurementId: '', loading: false, error: '' } };
+  const state = { result: null, ci: 0, view: 'overview', q: '', filter: 'all', sev: 'all', sort: { key: 'name', dir: 1 }, stack: [], lastInput: '', mode: 'home', ga4: { report: null, id: '', site: '', loading: false, section: 'overview', error: '' } };
 
   const C = () => state.result && state.result.containers[state.ci];
   const style = () => settings.style;
@@ -127,8 +127,9 @@
     e.preventDefault();
     const v = $('#q').value.trim();
     if (!v) { notice(state.mode === 'website' ? 'Enter a website URL.' : 'Enter a GTM ID, Google tag ID, website URL, or gtm.js URL.', 'error'); $('#q').focus(); return; }
-    if (state.mode === 'ga4-public') return ga4PublicLoad(v);
-    if (state.mode === 'ga4') return ga4LoadByInput(v);
+    if (state.mode === 'ga4') return ga4Load(v, state.ga4.site);
+    // Google tag IDs are not GTM containers: send them to the GA4 Inspector.
+    if (state.mode === 'gtm' && /^(G|GT|AW|DC)-[A-Z0-9]{4,15}$/i.test(v)) { setMode('ga4'); notice(`${esc(v.toUpperCase())} is a Google tag ID, so it was opened in the GA4 Inspector.`); return ga4Load(v, ''); }
     decode({ input: v });
   });
 
@@ -139,12 +140,12 @@
     const form = $('#decodeForm');
     const q = $('#q');
     const btn = $('#decodeBtn');
-    const showSearch = mode === 'gtm' || mode === 'website' || mode === 'ga4-public';
+    const showSearch = mode === 'gtm' || mode === 'website' || mode === 'ga4';
     form.hidden = !showSearch;
-    if (mode === 'gtm') { q.placeholder = 'GTM-XXXXXXX, G-XXXXXXXXXX, or a gtm.js URL'; btn.textContent = 'Audit GTM'; }
-    if (mode === 'ga4-public') { q.placeholder = 'G-XXXXXXXXXX'; btn.textContent = 'Inspect GA4'; }
+    if (mode === 'gtm') { q.placeholder = 'GTM-XXXXXXX or a gtm.js URL'; btn.textContent = 'Audit GTM'; }
     if (mode === 'website') { q.placeholder = 'https://example.com'; btn.textContent = 'Scan website'; }
-    if (mode === 'ga4') { q.placeholder = 'GA4 Measurement ID or Property ID'; btn.textContent = 'Audit GA4'; }
+    if (mode === 'ga4') { q.placeholder = 'G-XXXXXXXXXX'; btn.textContent = 'Inspect GA4'; }
+    notice('');
     if (mode === 'home') { q.placeholder = 'Choose an audit above'; }
     render();
   }
@@ -164,7 +165,6 @@
     layout.classList.toggle('no-nav', !c || state.mode !== 'gtm');
     $('#sidenav').hidden = !c || state.mode !== 'gtm';
     if (state.mode === 'home') { $('#view').innerHTML = viewWorkspace(); return; }
-    if (state.mode === 'ga4-public') { $('#view').innerHTML = viewGA4Public(); bindGA4Public(); return; }
     if (state.mode === 'ga4') { $('#view').innerHTML = viewGA4(); bindGA4(); return; }
     if (state.mode === 'website') { $('#view').innerHTML = state.result && state.result.site ? viewWebsiteOnly() : viewWebsiteLanding(); return; }
     if (!c) { $('#view').innerHTML = state.view === 'scan' && state.result ? viewScanOnly() : viewLanding(); return; }
@@ -222,7 +222,7 @@
         <div class="ways">
           <div class="way"><h3>GTM container ID</h3><p>Decodes the live published version.</p><code>GTM-XXXXXXX</code></div>
           <div class="way"><h3>Website</h3><p>Finds every container on the page and checks for hardcoded tags.</p><code>example.com</code></div>
-          <div class="way"><h3>Google tag ID</h3><p>Shows settings made in the GA4 or Ads interface.</p><code>G-XXXXXXXXXX</code></div>
+          <div class="way"><h3>Google tag ID</h3><p>G- IDs open in the GA4 Inspector, which reads the public Google tag configuration.</p><button type="button" class="btn-outline" data-mode="ga4">Open GA4 Inspector</button></div>
           <div class="way"><h3>Pasted source</h3><p>For custom loaders, staging, or when no proxy is set up.</p><button type="button" class="btn-outline" data-act="paste">${icon('paste')}Paste gtm.js</button></div>
         </div>
         ${recent.length ? `<div class="recent">Recent ${recent.map((r) => `<button type="button" class="chip" data-recent="${esc(r)}">${esc(r)}</button>`).join('')}</div>` : ''}
@@ -234,13 +234,13 @@
     return `<section class="workspace-home">
       <div class="hero-kicker">TRACKING AUDIT WORKSPACE</div>
       <h1>Audit the stack.<br><span>Not the noise.</span></h1>
-      <p class="hero-copy">Digital Lens is split into three independent audit surfaces. Choose exactly what you want to inspect — GTM configuration, GA4 property settings, or what is actually installed on a website.</p>
+      <p class="hero-copy">Three independent workspaces. Inspect a published GTM container, the public Google tag configuration behind a GA4 Measurement ID, or what is actually installed on a website — without logging into anyone's analytics account.</p>
       <div class="audit-grid">
         <button class="audit-card gtm" data-mode="gtm"><span class="audit-icon">◈</span><span class="audit-title">GTM Audit</span><span class="audit-desc">Decode a published container and inspect tags, triggers, variables, templates, firing logic and implementation findings.</span><span class="audit-cta">Open GTM audit →</span></button>
-        <button class="audit-card ga4" data-mode="ga4"><span class="audit-icon">◉</span><span class="audit-title">GA4 Property Audit</span><span class="audit-desc">Connect Google Analytics and inspect the actual property configuration — key events, streams, retention, identity, integrations and more.</span><span class="audit-cta">Open GA4 audit →</span></button>
+        <button class="audit-card ga4" data-mode="ga4"><span class="audit-icon">◉</span><span class="audit-title">GA4 Inspector</span><span class="audit-desc">Enter a Measurement ID and inspect its public Google tag configuration — destinations, tag settings, consent, linker, routing and event rules — with evidence for every value.</span><span class="audit-cta">Inspect a Measurement ID →</span></button>
         <button class="audit-card web" data-mode="website"><span class="audit-icon">◌</span><span class="audit-title">Website Insights</span><span class="audit-desc">Scan a live website independently to identify platforms, pixels, analytics IDs, containers, scripts and tracking technologies.</span><span class="audit-cta">Scan a website →</span></button>
       </div>
-      <div class="principles"><div><b>Three surfaces.</b><span>No mixed dashboards.</span></div><div><b>Readable names.</b><span>Technical IDs stay secondary.</span></div><div><b>Evidence first.</b><span>Unavailable API data is shown as unavailable, never guessed.</span></div></div>
+      <div class="principles"><div><b>Three surfaces.</b><span>No mixed dashboards.</span></div><div><b>Readable names.</b><span>Technical IDs stay secondary.</span></div><div><b>Evidence first.</b><span>Private data is marked "Not publicly exposed", never guessed.</span></div></div>
     </section>`;
   }
 
@@ -249,93 +249,221 @@
   }
 
   function viewWebsiteOnly() {
-    return `<section class="module-results"><div class="module-head"><div><div class="module-kicker">WEBSITE INSIGHTS</div><h1>Website technology & tracking</h1><p>${esc(state.result.site.url)}</p></div><button class="btn-outline" data-mode="website">Scan another site</button></div>${siteCard(state.result.site, [])}</section>`;
+    return `<section class="module-results"><div class="module-head"><div><div class="module-kicker">WEBSITE INSIGHTS</div><h1>Website technology & tracking</h1><p>${esc(state.result.site.url)}</p></div><button class="btn-outline" data-mode="website">Scan another site</button></div>${siteCard(state.result.site, state.result.containers || [])}</section>`;
   }
 
-  function ga4Status(ok, label, sub='') { return `<span class="status-pill ${ok ? 'ok' : 'muted'}"><i></i>${esc(label)}${sub ? `<small>${esc(sub)}</small>` : ''}</span>`; }
-  function ga4Metric(v, label, tone='') { return `<div class="ga-metric"><div class="ga-metric-value ${tone}">${esc(v)}</div><div class="ga-metric-label">${esc(label)}</div></div>`; }
-  function ga4Row(label, value) { return `<div class="ga-kv"><span>${esc(label)}</span><b>${esc(value == null || value === '' ? 'Not available' : value)}</b></div>`; }
-  function ga4SectionNav() {
-    const sections = [['overview','Overview'],['property','Property'],['streams','Data streams'],['events','Key events'],['enhanced','Enhanced measurement'],['acquisition','Acquisition settings'],['identity','Reporting identity'],['retention','Data retention'],['definitions','Custom definitions'],['filters','Data filters'],['integrations','Integrations'],['audiences','Audiences']];
-    return `<aside class="ga4-side"><div class="ga4-side-label">PROPERTY AUDIT</div>${sections.map(([id,n]) => `<button data-ga4-section="${id}" class="${state.ga4.section===id?'active':''}">${n}</button>`).join('')}<div class="ga4-side-note">Read-only audit<br>via Google Analytics Admin API</div></aside>`;
+  // ---------- GA4 Inspector (public Google tag configuration) ----------
+  // Everything shown here comes from TSD.ga4public: the public Google tag response for a
+  // Measurement ID, plus (optionally) a website's HTML and its verified GTM containers.
+  // No Google login, OAuth or GA4 Admin API is involved.
+  const GA4_SECTIONS = [
+    ['overview', 'Overview'], ['settings', 'Tag settings'], ['privacy', 'Privacy & consent'], ['cookies', 'Cookies & linker'],
+    ['campaign', 'Campaign & page'], ['destinations', 'Destinations'], ['events', 'Events & measurement'], ['relationships', 'Relationships'], ['evidence', 'Evidence'],
+  ];
+  const SOURCE_CLASS = { 'google-tag': 'src-tag', website: 'src-site', gtm: 'src-gtm' };
+  const srcBadge = (label, type) => `<span class="src-badge ${SOURCE_CLASS[type] || ''}">${esc(label)}</span>`;
+  const statusTone = (s) => (s === 'detected' ? 'ok' : s === 'partial' ? 'warn' : 'muted');
+  function statusPill(tone, label) { return `<span class="status-pill ${tone}"><i></i>${esc(label)}</span>`; }
+  function gaMetric(v, label) { return `<div class="ga-metric"><div class="ga-metric-value">${esc(v)}</div><div class="ga-metric-label">${esc(label)}</div></div>`; }
+  function gaRow(label, value) { return `<div class="ga-kv"><span>${esc(label)}</span><b>${esc(value == null || value === '' ? 'Not publicly exposed' : value)}</b></div>`; }
+  const notExposed = (what) => `<div class="not-exposed"><b>Not publicly exposed</b><span>${esc(what)}</span></div>`;
+  const sectionFields = (r, ...sections) => r.fields.filter((f) => sections.includes(f.section));
+
+  function fieldTable(rows, empty) {
+    if (!rows.length) return notExposed(empty || 'No explicit value was found in the inspected public sources.');
+    return `<div class="table-scroll"><table class="ga-table ev-table"><thead><tr><th>Field</th><th>Value</th><th>Source</th></tr></thead><tbody>${rows.map((f) => `<tr><td><b>${esc(f.label)}</b>${f.label !== f.field ? `<div class="mono sub">${esc(f.field)}</div>` : ''}</td><td class="val${f.redacted ? ' redacted' : ''}">${esc(f.display)}</td><td>${srcBadge(f.source, f.sourceType)}<div class="mono sub">${esc(f.location)}</div></td></tr>`).join('')}</tbody></table></div>`;
   }
-  function ga4PublicStatus(ok, label) { return `<span class="status-pill ${ok ? 'ok' : 'muted'}"><i></i>${esc(label)}</span>`; }
-  function ga4PublicMetric(v, label) { return `<div class="ga-metric"><div class="ga-metric-value">${esc(v)}</div><div class="ga-metric-label">${esc(label)}</div></div>`; }
-  function publicValue(v) { return v == null || v === '' ? 'Not publicly exposed' : v; }
-  function ga4PublicSection(data) {
-    const key = state.ga4public.section || 'overview';
-    const nav = [['overview','Overview'],['events','Events'],['enhanced','Enhanced measurement'],['configuration','Configuration'],['relationships','Relationships']];
-    const side = `<aside class="ga4-side"><div class="ga4-side-label">GA4 INSPECTOR</div>${nav.map(([id,n]) => `<button data-ga4-public-section="${id}" class="${key===id?'active':''}">${n}</button>`).join('')}<div class="ga4-side-note">Public configuration only<br>No GA4 login required</div></aside>`;
-    const cfg=data.config||{};
-    let body='';
-    if(key==='overview') body=`<div class="module-head"><div><div class="module-kicker">GA4 PUBLIC INSPECTOR</div><h1>${esc(data.measurementId)}</h1><p>Public Google tag configuration discovered from the browser-served GA4 payload.</p></div><div>${ga4PublicStatus(true,'Public config')} <button class="btn-outline" id="ga4PublicRefresh">Refresh</button></div></div><div class="ga-metrics">${ga4PublicMetric(data.platform.toUpperCase(),'Platform')}${ga4PublicMetric(data.scriptBytes ? Math.round(data.scriptBytes/1024)+' KB' : '—','Payload')}${ga4PublicMetric(data.enhanced.events.length,'Enhanced events')}${ga4PublicMetric(data.events.keyEvents.length,'Key events')}${ga4PublicMetric(data.events.create.length,'Create events')}${ga4PublicMetric(data.events.modify.length,'Modify events')}</div><div class="ga-grid"><div class="ga-card"><h2>Property signal</h2>${ga4Row('Measurement ID',data.measurementId)}${ga4Row('Google tag payload',data.dataFound?'Parsed':'Detected')}${ga4Row('Enhanced measurement',data.enhanced.enabled==null?'Not publicly exposed':(data.enhanced.enabled?'Enabled':'Disabled'))}${ga4Row('Cross-domain',cfg.linkerDomains.length?'Configured':'Not detected')}${ga4Row('Unwanted referrals',data.availability.unwantedReferrals)}</div><div class="ga-card"><h2>What this scan can prove</h2><div class="coverage-list">${coverage('Measurement ID',true)}${coverage('Public tag payload',true)}${coverage('Enhanced measurement hints',data.enhanced.events.length>0)}${coverage('Private GA4 Admin settings',false)}${coverage('GA4 report data',false)}</div><div class="api-note">A Measurement ID is public. This inspector does not claim access to private property settings or report data.</div></div></div>${data.hints.length?`<div class="ga-card wide ga4-public-notes"><h2>Detected public signals</h2>${data.hints.map(x=>`<div class="def-row"><b>Detected</b><span>${esc(x)}</span></div>`).join('')}</div>`:''}`;
-    if(key==='events') body=`<div class="module-head"><div><div class="module-kicker">EVENT CONFIGURATION</div><h1>Events</h1><p>Only events exposed in the public tag payload are shown as detected.</p></div></div><div class="ga-grid"><div class="ga-card"><h2>Enhanced measurement</h2>${data.enhanced.events.map(x=>`<div class="def-row"><b>${esc(x)}</b><span>Automatically measured</span></div>`).join('')||'<div class="empty">No enhanced-measurement event names were exposed.</div>'}</div><div class="ga-card"><h2>Configured event rules</h2>${[['Key events',data.events.keyEvents],['Create events',data.events.create],['Modify events',data.events.modify]].map(([n,arr])=>`<div class="def-row"><b>${n}</b><span>${arr.length?arr.map(esc).join(', '):'Not publicly exposed'}</span></div>`).join('')}</div></div>`;
-    if(key==='enhanced') body=`<div class="module-head"><div><div class="module-kicker">AUTOMATIC COLLECTION</div><h1>Enhanced measurement</h1><p>Signals inferred from the public Google tag payload.</p></div></div><div class="ga-card wide"><div class="toggle-grid">${[['Page views',data.enhanced.events.includes('Page views')],['Scrolls',data.enhanced.events.includes('Scrolls')],['Outbound clicks',data.enhanced.events.includes('Outbound clicks')],['Site search',data.enhanced.events.includes('Site search')],['Video engagement',data.enhanced.events.includes('Video engagement')],['File downloads',data.enhanced.events.includes('File downloads')],['Form interactions',data.enhanced.events.includes('Form interactions')]].map(([n,on])=>toggle(n,on)).join('')}</div><div class="api-note">Detected event names are evidence from the public payload, not a substitute for the GA4 Admin API setting.</div></div>`;
-    if(key==='configuration') body=`<div class="module-head"><div><div class="module-kicker">PUBLIC TAG SETTINGS</div><h1>Configuration</h1><p>Values Digital Lens can extract without Google account access.</p></div></div><div class="ga-grid"><div class="ga-card">${ga4Row('send_page_view',publicValue(cfg.sendPageView==null?null:(cfg.sendPageView?'true':'false')))}${ga4Row('allow_google_signals',publicValue(cfg.allowGoogleSignals==null?null:(cfg.allowGoogleSignals?'true':'false')))}${ga4Row('Cookie domain',publicValue(cfg.cookieDomain))}${ga4Row('Cookie expiry',publicValue(cfg.cookieExpires))}${ga4Row('Debug mode',cfg.debugMode?'Enabled':'Not detected')}</div><div class="ga-card">${ga4Row('Server container URL',publicValue(cfg.serverContainerUrl))}${ga4Row('Transport URL',publicValue(cfg.serverContainerUrl))}${ga4Row('Consent signals',cfg.consent.length?cfg.consent.join(' · '):'Not publicly exposed')}${ga4Row('Raw GA4 IDs found',data.ids.join(', '))}</div></div>`;
-    if(key==='relationships') body=`<div class="module-head"><div><div class="module-kicker">IMPLEMENTATION RELATIONSHIPS</div><h1>Related configuration</h1><p>Connections that can be inferred from the public payload.</p></div></div><div class="ga-card wide">${ga4Row('Cross-domain domains',cfg.linkerDomains.length?cfg.linkerDomains.join(', '):'Not detected')}${ga4Row('Server-side tagging',cfg.serverContainerUrl?'Detected':'Not detected')}${ga4Row('Consent Mode signals',cfg.consent.length?'Detected':'Not detected')}${ga4Row('GTM container', 'Not identifiable from this GA4 ID alone')}${ga4Row('Google Ads link', 'Not publicly exposed')}${ga4Row('BigQuery link', 'Not publicly exposed')}${ga4Row('Search Console link', 'Not publicly exposed')}</div>`;
-    return `<div class="ga4-shell">${side}<main class="ga4-main">${state.ga4public.error?`<div class="notice error">${esc(state.ga4public.error)}</div>`:''}${body}</main></div>`;
+  function ga4Head(kicker, title, sub, right = '') {
+    return `<div class="module-head"><div><div class="module-kicker">${esc(kicker)}</div><h1>${title}</h1>${sub ? `<p>${sub}</p>` : ''}</div>${right ? `<div class="head-actions">${right}</div>` : ''}</div>`;
   }
-  function viewGA4Public() {
-    const d=state.ga4public.data;
-    if(!d) return `<section class="ga4-connect"><div class="module-kicker">GA4 PUBLIC INSPECTOR</div><h1>Analyze a GA4 property.<br><span>No Google login required.</span></h1><p>Enter a Measurement ID and Digital Lens will inspect the public Google tag configuration that browsers receive. It does not access GA4 reports or private Admin settings.</p><div class="connect-card"><div class="connect-logo">◉</div><div><h2>Public GA4 configuration</h2><p>Measurement IDs are public identifiers. The scan is read-only and uses the configured fetch proxy on the hosted app.</p><div class="ga4-client-row"><input id="ga4PublicId" placeholder="G-XXXXXXXXXX" value="${esc(state.ga4public.measurementId)}"><button class="btn-primary" id="ga4PublicInspect">Inspect GA4</button></div><p class="small muted">Source: browser-served Google tag payload. Private property data is intentionally marked unavailable.</p></div></div><div class="api-scope"><b>Public signals Digital Lens can inspect</b><span>Measurement ID</span><span>Google tag payload</span><span>Enhanced measurement hints</span><span>Consent signals</span><span>Cross-domain linker</span><span>Server-side transport</span><span>Event configuration when publicly exposed</span></div></section>`;
-    return ga4PublicSection(d);
+  function ga4Card(title, body, cls = '') { return `<div class="ga-card ${cls}">${title ? `<h2>${title}</h2>` : ''}${body}</div>`; }
+
+  function ga4Counts(r) {
+    return {
+      settings: sectionFields(r, 'settings', 'routing', 'other', 'identity').length,
+      privacy: sectionFields(r, 'privacy', 'consent').length + r.consent.default.length + r.consent.update.length,
+      cookies: sectionFields(r, 'cookies', 'linker').length + r.linker.domains.length,
+      campaign: sectionFields(r, 'campaign', 'page').length,
+      destinations: r.destinations.length,
+      events: r.enhanced.length + r.events.key.length + r.events.create.length + r.events.modify.length + r.events.website.length + r.events.gtm.length,
+      evidence: r.fields.length,
+    };
   }
-  async function ga4PublicLoad(id){
-    state.ga4public.measurementId=String(id||'').trim().toUpperCase(); state.ga4public.loading=true; state.ga4public.error=''; render();
-    try { state.ga4public.data=await TSD.ga4public.inspect(state.ga4public.measurementId,TSD.net.fetchText); state.ga4public.section='overview'; } catch(e) { state.ga4public.data=null; state.ga4public.error=e.message||String(e); } finally { state.ga4public.loading=false; render(); }
+
+  function viewGA4Landing() {
+    const g = state.ga4;
+    const b = TSD.net.current();
+    const conn = b && b.mode === 'direct' ? `<div class="notice warn">No fetch proxy is connected, so Google's response can't be requested from this browser. Connect the proxy in Settings, or paste the response below.</div>` : '';
+    return `<section class="ga4-connect">
+      <div class="module-kicker">GA4 INSPECTOR · PUBLIC GOOGLE TAG CONFIGURATION</div>
+      <h1>Inspect a Measurement ID.<br><span>No Google login required.</span></h1>
+      <p>Digital Lens requests the public Google tag response for the ID (<code>googletagmanager.com/gtm.js?id=…</code>, with <code>gtag/js</code> as fallback) and reports only what that response, and optionally the website, explicitly contains.</p>
+      ${conn}
+      <form class="connect-card" id="ga4Form" autocomplete="off">
+        <div class="connect-logo">◉</div>
+        <div>
+          <div class="ga4-inputs">
+            <label>Measurement ID<input id="ga4Id" placeholder="G-XXXXXXXXXX" value="${esc(g.id)}" spellcheck="false" required></label>
+            <label>Website URL <em>optional</em><input id="ga4Site" placeholder="https://example.com" value="${esc(g.site)}" spellcheck="false"></label>
+          </div>
+          <div class="ga4-form-row"><button class="btn-primary big" type="submit" id="ga4Inspect">Inspect</button><span class="small muted">Adding a website compares its HTML and verified GTM containers with this ID.</span></div>
+          <details class="paste-alt"><summary>Paste the Google tag response instead</summary><p class="small muted">Open <code>https://www.googletagmanager.com/gtm.js?id=G-…</code> in a browser tab, select all, copy, and paste it here. Works without the proxy.</p><textarea id="ga4Paste" spellcheck="false" placeholder="Paste the full gtm.js / gtag.js response"></textarea><button type="button" class="btn-outline" id="ga4PasteGo">Inspect pasted response</button></details>
+        </div>
+      </form>
+      <div class="source-legend">
+        <div><span class="src-badge src-tag">Public Google tag response</span><p>gtm.js / gtag.js served for the Measurement ID. Enhanced measurement, key event rules, create/modify rules, cross-domain, unwanted referrals, Google signals and data controls appear here when configured.</p></div>
+        <div><span class="src-badge src-site">Website HTML</span><p>gtag('config'), gtag('set') and gtag('consent') calls written in the page: send_page_view, cookies, server_container_url, transport_url, consent default/update.</p></div>
+        <div><span class="src-badge src-gtm">GTM container</span><p>Google tag and GA4 event tags in the site's verified, published GTM containers that reference this ID.</p></div>
+        <div><span class="src-badge src-private">GA4 Admin API: not used</span><p>Reports, audiences, custom definitions, retention and product links are private and are never shown or guessed.</p></div>
+      </div>
+    </section>`;
   }
-  function bindGA4Public(){
-    document.querySelectorAll('[data-ga4-public-section]').forEach(b=>b.addEventListener('click',()=>{state.ga4public.section=b.dataset.ga4PublicSection;render();}));
-    const i=$('#ga4PublicInspect'); if(i)i.addEventListener('click',()=>ga4PublicLoad($('#ga4PublicId').value.trim()));
-    const r=$('#ga4PublicRefresh'); if(r)r.addEventListener('click',()=>ga4PublicLoad(state.ga4public.measurementId));
+
+  function viewGA4Loading() {
+    const g = state.ga4;
+    return `<section class="ga4-connect"><div class="module-kicker">GA4 INSPECTOR</div><h1>Inspecting ${esc(g.id)}…</h1><div class="loading-card"><div class="spinner"></div><div><b>Requesting the public Google tag response</b><div class="mono sub">https://www.googletagmanager.com/gtm.js?id=${esc(g.id)}</div>${g.site ? `<div class="mono sub">and ${esc(g.site)}</div>` : ''}</div></div></section>`;
+  }
+
+  function ga4Overview(r) {
+    const n = ga4Counts(r);
+    const ids = {};
+    r.destinations.forEach((d) => { (ids[d.type] || (ids[d.type] = [])).push(d.id + (d.labels.length ? ` (${d.labels.length} label${d.labels.length === 1 ? '' : 's'})` : '')); });
+    const routing = sectionFields(r, 'routing');
+    const consentCount = r.consent.default.length + r.consent.update.length + r.consent.signals.length;
+    const coverageRow = (name, count, note) => `<div class="coverage-row"><span class="coverage-dot ${count ? 'ok' : 'pending'}"></span><span>${esc(name)}</span><b>${count ? esc(note || 'Detected') : 'Not publicly exposed'}</b></div>`;
+    return `${ga4Head('GA4 INSPECTOR', `${esc(r.measurementId)}`, `${esc(r.idLabel)} · inspected ${esc(new Date(r.inspectedAt).toLocaleString())}`, `${statusPill(statusTone(r.status), r.statusLabel)}<button class="btn-outline" id="ga4Refresh" type="button">Refresh</button><button class="btn-outline" id="ga4New" type="button">New inspection</button>`)}
+      ${r.websiteError ? `<div class="notice warn">Website comparison failed: ${esc(r.websiteError)}</div>` : ''}
+      <div class="ga-metrics">${gaMetric(r.platform, 'Platform')}${gaMetric(r.payloadBytes ? fmtWeight(r.payloadBytes) : '—', 'Payload')}${gaMetric(r.destinations.length, 'Google IDs')}${gaMetric(n.settings, 'Explicit settings')}${gaMetric(consentCount, 'Consent signals')}${gaMetric(routing.length ? 'Detected' : 'None', 'Server-side routing')}</div>
+      <div class="ga-grid">
+        ${ga4Card('Inspection', `${gaRow('Status', r.statusLabel)}${gaRow('Source', r.source ? r.source.label : 'No Google tag response parsed')}${r.source && r.source.url ? gaRow('Requested URL', r.source.url) : ''}${gaRow('Config version', r.containerVersion)}${r.website ? gaRow('Website compared', r.website.url) : ''}<div class="attempts">${r.attempts.map((a) => `<div class="attempt ${a.ok ? 'ok' : 'bad'}"><b>${esc(a.endpoint)}</b><span>${esc(a.outcome)}</span></div>`).join('')}</div>`)}
+        ${ga4Card('Identity & destinations', `${gaRow('Measurement ID', r.measurementId)}${Object.entries(ids).map(([t, list]) => gaRow(t, list.join(', '))).join('') || gaRow('Destinations', null)}${r.website ? gaRow('Implementation', [r.website.hardcoded ? 'Hardcoded gtag.js' : '', r.website.viaGtm.length ? 'GTM ' + r.website.viaGtm.join(', ') : ''].filter(Boolean).join(' · ') || 'Not found on the website') : ''}`)}
+        ${ga4Card('What this inspection found', `<div class="coverage-list">${coverageRow('Tag settings', n.settings)}${coverageRow('Enhanced measurement', r.enhanced.length, r.enhanced.length + ' of 7 present')}${coverageRow('Key event rules', r.events.key.length, r.events.key.length + ' rule' + (r.events.key.length === 1 ? '' : 's'))}${coverageRow('Create / modify event rules', r.events.create.length + r.events.modify.length, (r.events.create.length + r.events.modify.length) + ' rule(s)')}${coverageRow('Cross-domain linker', r.linker.domains.length || sectionFields(r, 'linker').length)}${coverageRow('Consent', consentCount)}${coverageRow('Server-side routing', routing.length)}</div>`)}
+        ${ga4Card('Limitations', `<p class="muted limit">${esc(r.limitations)}</p>${r.website ? '' : '<p class="muted limit">Consent defaults, cookie settings and gtag config parameters are written in the website code, not in the Google tag response. Add a website URL to inspect them.</p>'}`)}
+      </div>
+      ${r.notes.length ? ga4Card('Inspection notes', `<ul class="hint">${r.notes.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`, 'wide') : ''}`;
+  }
+
+  function ga4Settings(r) {
+    const tagTemplates = r.templates.filter((t) => t.known && !/^Enhanced measurement|rule$|processing/.test(t.label));
+    return `${ga4Head('TAG SETTINGS', 'Tag settings', 'Explicit Google tag configuration values. Only fields that were actually found are listed.')}
+      ${ga4Card('Configuration values', fieldTable(sectionFields(r, 'settings', 'identity', 'other'), 'No explicit configuration values were found. Values set in gtag(\'config\') live in the website code; add a website URL to inspect them.'), 'wide')}
+      ${ga4Card('Server-side / routing', fieldTable(sectionFields(r, 'routing'), 'No server_container_url or transport_url was found.'), 'wide')}
+      ${tagTemplates.length ? ga4Card('Google tag templates in the public response', `<div class="tpl-list">${tagTemplates.map((t) => `<div class="tpl"><b>${esc(t.label)}</b><code>${esc(t.fn)}</code></div>`).join('')}</div>`, 'wide') : ''}`;
+  }
+
+  function consentTable(entries, mode) {
+    if (!entries.length) return notExposed(`No gtag('consent', '${mode}', …) call was found${state.ga4.report && state.ga4.report.website ? ' in the website HTML' : '. Consent commands live in the website code; add a website URL'}.`);
+    return entries.map((e) => `<div class="consent-block"><div class="consent-src">${srcBadge(e.source, 'website')}<span class="mono sub">${esc(e.location)}</span></div><div class="consent-grid">${Object.entries(e.params).map(([k, v]) => `<div class="consent-item ${/granted/.test(v) ? 'granted' : /denied/.test(v) ? 'denied' : ''}"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div></div>`).join('');
+  }
+
+  function ga4Privacy(r) {
+    const gtmConsent = r.gtm.flatMap((g) => g.consentPlatforms.map((p) => `${p} (${g.containerId})`));
+    return `${ga4Head('PRIVACY & CONSENT', 'Privacy & consent', 'Consent default and consent update are shown separately. A Google tag being present does not imply a consent implementation.')}
+      <div class="ga-grid">${ga4Card('Consent default', consentTable(r.consent.default, 'default'))}${ga4Card('Consent update', consentTable(r.consent.update, 'update'))}</div>
+      ${ga4Card('Google tag privacy & data controls', fieldTable(sectionFields(r, 'privacy'), 'No Google signals, data redaction, region controls or user-provided data settings were found in the public response.'), 'wide')}
+      ${r.consent.signals.length || gtmConsent.length ? ga4Card('Other consent signals', `${r.consent.signals.map((s) => `<div class="def-row"><b>${esc(s.label)}</b><span>${srcBadge(s.source, 'google-tag')} <span class="mono">${esc(s.location)}</span></span></div>`).join('')}${gtmConsent.map((x) => `<div class="def-row"><b>Consent platform tag in GTM</b><span>${esc(x)}</span></div>`).join('')}`, 'wide') : ''}`;
+  }
+
+  function ga4Cookies(r) {
+    const domains = r.linker.domains;
+    return `${ga4Head('COOKIES & LINKER', 'Cookies & cross-domain', 'Cookie configuration and linker settings. Cookie names are implementation details and are never reported as events.')}
+      ${ga4Card('Cookie configuration', fieldTable(sectionFields(r, 'cookies'), 'No cookie_domain, cookie_expires, cookie_flags, cookie_path, cookie_prefix or cookie_update value was found.'), 'wide')}
+      <div class="ga-grid">
+        ${ga4Card(`Cross-domain domains <span class="n">${domains.length}</span>`, domains.length ? domains.map((d) => `<div class="def-row"><b>${esc(d.domain)}</b><span>${srcBadge(d.source, /Website/.test(d.source) ? 'website' : /GTM/.test(d.source) ? 'gtm' : 'google-tag')} <span class="mono">${esc(d.location)}</span></span></div>`).join('') : notExposed('No cross-domain linker domains were found.'))}
+        ${ga4Card(`Unwanted referrals <span class="n">${r.referralExclusions.length}</span>`, r.referralExclusions.length ? r.referralExclusions.map((d) => `<div class="def-row"><b>${esc(d.domain)}</b><span>${srcBadge(d.source, 'google-tag')} <span class="mono">${esc(d.location)}</span></span></div>`).join('') : notExposed('No unwanted-referral rules were found in the public response.'))}
+      </div>
+      ${ga4Card('Linker settings', fieldTable(sectionFields(r, 'linker'), 'No linker, accept_incoming, decorate_forms or url_position setting was found.'), 'wide')}`;
+  }
+
+  function ga4Campaign(r) {
+    return `${ga4Head('CAMPAIGN & PAGE', 'Campaign, page & user configuration', 'Only explicitly configured values. User identifiers are never displayed.')}
+      ${ga4Card('Campaign', fieldTable(sectionFields(r, 'campaign'), 'No campaign_id, campaign_source, campaign_medium, campaign_name, campaign_term or campaign_content value was found.'), 'wide')}
+      ${ga4Card('Page', fieldTable(sectionFields(r, 'page'), 'No page_location, page_title, language or currency value was found.'), 'wide')}
+      ${ga4Card('User / identity', fieldTable(r.fields.filter((f) => ['user_id', 'client_id', 'user_data', 'user_properties'].includes(f.field)), 'No user_id or client_id configuration was found.'), 'wide')}`;
+  }
+
+  function ga4Destinations(r) {
+    return `${ga4Head('DESTINATIONS', `Google destinations <span class="n">${r.destinations.length}</span>`, 'Explicit Google IDs found in the public configuration: GA4 (G-), Google tag (GT-), Google Ads (AW-) and Floodlight (DC-).')}
+      ${ga4Card('', r.destinations.length ? `<div class="table-scroll"><table class="ga-table"><thead><tr><th>ID</th><th>Type</th><th>Labels</th><th>Source</th></tr></thead><tbody>${r.destinations.map((d) => `<tr><td><b class="mono">${esc(d.id)}</b>${d.self ? ' <span class="status-pill ok"><i></i>Inspected ID</span>' : ''}</td><td>${esc(d.type)}</td><td class="mono">${esc(d.labels.join(', ') || '—')}</td><td>${d.sources.map((s) => `<div>${srcBadge(s.source, s.sourceType)} <span class="mono sub">${esc(s.location)}</span></div>`).join('')}</td></tr>`).join('')}</tbody></table></div>` : notExposed('No destination IDs were found.'), 'wide')}`;
+  }
+
+  function eventList(list, render, empty) { return list.length ? list.map(render).join('') : notExposed(empty); }
+  function ga4Events(r) {
+    const em = [['page_view', 'Page views'], ['scroll', 'Scrolls'], ['outbound_click', 'Outbound clicks'], ['site_search', 'Site search'], ['video', 'Video engagement'], ['file_download', 'File downloads'], ['form', 'Form interactions']];
+    const emHtml = r.source ? `<div class="toggle-grid">${em.map(([k, n]) => { const e = r.enhanced.find((x) => x.key === k); return `<div class="toggle-item ${e ? 'on' : ''}"><div><span>${esc(n)}</span>${e && e.details.length ? `<small>${esc(e.details.join(' · '))}</small>` : ''}</div>${e ? statusPill('ok', 'In response') : statusPill('muted', 'Not in response')}</div>`; }).join('')}</div><div class="api-note">"In response" means the enhanced-measurement template is present in the public Google tag response. Absence is reported as "Not in response", not as a confirmed setting.</div>` : notExposed('No Google tag response was parsed, so enhanced measurement cannot be determined.');
+    const src = (e, type) => `<span>${srcBadge(e.source, type)} <span class="mono">${esc(e.location)}</span></span>`;
+    return `${ga4Head('EVENTS & MEASUREMENT', 'Events & measurement', 'Only event rules that are explicitly present in a public source. Cookies, library variables and internal Google values are never listed as events.')}
+      ${ga4Card('Enhanced measurement', emHtml, 'wide')}
+      <div class="ga-grid">
+        ${ga4Card(`Key event rules <span class="n">${r.events.key.length}</span>`, eventList(r.events.key, (e) => `<div class="def-row"><b>${esc(e.name)}</b>${src(e, 'google-tag')}</div>`, 'No key event rules are present in the public Google tag response.'))}
+        ${ga4Card(`Create event rules <span class="n">${r.events.create.length}</span>`, eventList(r.events.create, (e) => `<div class="def-row"><div><b>${esc(e.name)}</b><span>from ${esc(e.from.join(', ') || 'unspecified event')}${e.copyParams != null ? ` · copy parameters: ${e.copyParams ? 'yes' : 'no'}` : ''}</span></div>${src(e, 'google-tag')}</div>`, 'No create-event rules are present in the public Google tag response.'))}
+        ${ga4Card(`Modify event rules <span class="n">${r.events.modify.length}</span>`, eventList(r.events.modify, (e) => `<div class="def-row"><div><b>${esc(e.name)}</b><span>${e.changes.length ? 'changes: ' + esc(e.changes.join(', ')) : 'parameter changes not readable'}</span></div>${src(e, 'google-tag')}</div>`, 'No modify-event rules are present in the public Google tag response.'))}
+        ${ga4Card(`Events sent from website code <span class="n">${r.events.website.length}</span>`, r.website ? eventList(r.events.website, (e) => `<div class="def-row"><div><b>${esc(e.name)}</b><span>${e.params.length ? 'parameters: ' + esc(e.params.join(', ')) : ''}</span></div>${src(e, 'website')}</div>`, 'No gtag(\'event\', …) calls for this ID were found in the website HTML.') : notExposed('Add a website URL to look for gtag(\'event\', …) calls.'))}
+      </div>
+      ${r.website ? ga4Card(`GA4 event tags in GTM <span class="n">${r.events.gtm.length}</span>`, eventList(r.events.gtm, (e) => `<div class="def-row"><b>${esc(e.name)}</b>${src(e, 'gtm')}</div>`, 'No GA4 event tags referencing this ID were found in the verified GTM containers.'), 'wide') : ''}`;
+  }
+
+  function ga4Relationships(r) {
+    return `${ga4Head('RELATIONSHIPS', 'Implementation relationships', 'How the Measurement ID connects to the Google tag, destinations, website, GTM, routing, cross-domain and consent. Only relationships backed by evidence are marked as detected.')}
+      <div class="rel-chain">${r.relationships.map((x) => `<div class="rel-step ${x.status}"><div class="rel-dot"></div><div class="rel-body"><div class="rel-label">${esc(x.step)}</div><div class="rel-value">${esc(x.value)}</div>${x.detail ? `<div class="rel-detail">${esc(x.detail)}</div>` : ''}</div><span class="rel-status">${x.status === 'detected' ? 'Detected' : x.status === 'input' ? 'Input' : x.status === 'unknown' ? 'Not determinable' : x.status === 'missing' ? 'Not retrieved' : 'Not detected'}</span></div>`).join('')}</div>
+      ${r.website ? ga4Card('Website', `${gaRow('URL', r.website.url)}${gaRow('Built with', r.website.platform)}${gaRow('ID in page HTML', r.website.idInHtml ? 'Yes' : 'No')}${gaRow('Hardcoded gtag.js / config', r.website.hardcoded ? 'Yes' : 'No')}${gaRow('Verified GTM containers', r.website.gtmIds.join(', ') || 'None')}${gaRow('Containers referencing this ID', r.website.viaGtm.join(', ') || 'None')}${r.website.errors.length ? gaRow('Container errors', r.website.errors.join(' · ')) : ''}`, 'wide') : ''}`;
+  }
+
+  function ga4Evidence(r) {
+    return `${ga4Head('EVIDENCE', `Evidence <span class="n">${r.fields.length}</span>`, 'Every reported value, where it came from and where in that source it was found.', `<button class="btn-outline" type="button" id="ga4Json">Download JSON</button>`)}
+      ${ga4Card('Reported values', fieldTable(r.fields), 'wide')}
+      ${r.templates.length ? ga4Card(`Google tag templates in the response <span class="n">${r.templates.length}</span>`, `<div class="table-scroll"><table class="ga-table"><thead><tr><th>#</th><th>Template</th><th>Interpretation</th><th>Parameters</th></tr></thead><tbody>${r.templates.map((t) => `<tr><td class="mono">${t.index}</td><td class="mono">${esc(t.fn)}</td><td>${t.known ? esc(t.label) : '<span class="muted">Not interpreted</span>'}</td><td><details><summary>${Object.keys(t.params).length} parameter(s)</summary><pre class="code">${esc(JSON.stringify(t.params, null, 2))}</pre></details></td></tr>`).join('')}</tbody></table></div>`, 'wide') : ''}
+      ${ga4Card('Requests', r.attempts.map((a) => `<div class="attempt ${a.ok ? 'ok' : 'bad'}"><b>${esc(a.endpoint)}</b><span>${a.url ? `<span class="mono">${esc(a.url)}</span> · ` : ''}${esc(a.outcome)}</span></div>`).join(''), 'wide')}`;
   }
 
   function viewGA4() {
-    const a = state.ga4.audit;
-    if (!a) { const props=state.ga4.properties||[]; return `<section class="ga4-connect"><div class="module-kicker">GA4 PROPERTY AUDIT</div><h1>Audit the property.<br><span>Not the tracking snippet.</span></h1><p>Connect a Google account with access to the GA4 property. Digital Lens reads the property's administrative configuration through Google's Analytics Admin API.</p><div class="connect-card"><div class="connect-logo">◉</div><div><h2>${state.ga4.connected?'Google Analytics connected':'Connect Google Analytics'}</h2><p>Read-only access is requested. Digital Lens does not request edit access.</p>${!state.ga4.connected?`<div class="ga4-client-row"><label>Google OAuth Web Client ID <input id="ga4ClientId" value="${esc(TSD_GA4.getClientId())}" placeholder="1234567890-xxxxxxxx.apps.googleusercontent.com"></label><button class="btn-outline" id="saveGa4Client">Save ID</button></div><button class="btn-primary big" id="connectGa4">Connect Google account</button>`:`<div class="property-picker"><label>Choose a GA4 property<select id="ga4PropertySelect"><option value="">Select a property…</option>${props.map(x=>`<option value="${esc(x.id)}" ${x.id===state.ga4.propertyId?'selected':''}>${esc(x.displayName)} · ${esc(x.id)}</option>`).join('')}</select></label><div class="orline"><span>or audit by Measurement ID</span></div><div class="ga4-client-row"><input id="ga4MeasurementId" placeholder="G-XXXXXXXXXX"><button class="btn-primary" id="auditMeasurement">Audit Measurement ID</button></div><button class="btn-primary big" id="auditProperty">Audit selected property</button></div>`}<p class="small muted">A Google Cloud OAuth Web Client is required for the hosted version. The client ID is public; no client secret belongs in this app.</p></div></div><div class="api-scope"><b>What Digital Lens can audit</b><span>Property metadata</span><span>Data streams</span><span>Key events</span><span>Enhanced measurement</span><span>Reporting identity</span><span>Retention</span><span>Custom definitions</span><span>Filters</span><span>Google Ads / BigQuery links</span></div></section>`; }
-    return `<div class="ga4-shell">${ga4SectionNav()}<main class="ga4-main">${state.ga4.error ? `<div class="notice error">${esc(state.ga4.error)}</div>` : ''}${ga4AuditSection(a)}</main></div>`;
+    const g = state.ga4;
+    if (g.loading) return viewGA4Loading();
+    const r = g.report;
+    if (!r) return `${g.error ? `<div class="ga4-error-wrap"><div class="notice error">${esc(g.error)}</div></div>` : ''}${viewGA4Landing()}`;
+    const n = ga4Counts(r);
+    const views = { overview: ga4Overview, settings: ga4Settings, privacy: ga4Privacy, cookies: ga4Cookies, campaign: ga4Campaign, destinations: ga4Destinations, events: ga4Events, relationships: ga4Relationships, evidence: ga4Evidence };
+    const side = `<aside class="ga4-side"><div class="ga4-side-label">GA4 INSPECTOR</div><div class="ga4-side-id">${esc(r.measurementId)}</div>${GA4_SECTIONS.map(([id, name]) => `<button type="button" data-ga4-section="${id}" class="${g.section === id ? 'active' : ''}">${esc(name)}${n[id] != null ? `<span class="count">${n[id]}</span>` : ''}</button>`).join('')}<div class="ga4-side-note">Public configuration only.<br>No Google login, no GA4 Admin API.</div></aside>`;
+    return `<div class="ga4-shell">${side}<main class="ga4-main">${g.error ? `<div class="notice error">${esc(g.error)}</div>` : ''}${(views[g.section] || ga4Overview)(r)}</main></div>`;
   }
 
-  function ga4AuditSection(a) {
-    const p=a.property||{}; const id=(p.name||'').split('/').pop();
-    if(state.ga4.section==='overview') return `<div class="module-head"><div><div class="module-kicker">GA4 PROPERTY AUDIT</div><h1>${esc(p.displayName||'GA4 property')}</h1><p>Property ${esc(id)} · ${esc(p.timeZone||'Timezone unavailable')}</p></div><div>${ga4Status(true,'Connected')} <button class="btn-outline" id="ga4Refresh">Refresh</button></div></div><div class="ga-metrics">${ga4Metric(a.keyEvents.length,'Key events')}${ga4Metric(a.streams.length,'Data streams')}${ga4Metric(a.dimensions.length,'Custom dimensions')}${ga4Metric(a.metrics.length,'Custom metrics')}${ga4Metric(a.filters.length,'Data filters')}${ga4Metric(a.audiences.length,'Audiences')}</div><div class="ga-grid"><div class="ga-card"><h2>Property configuration</h2>${ga4Row('Property ID',id)}${ga4Row('Currency',p.currencyCode)}${ga4Row('Industry',p.industryCategory)}${ga4Row('Timezone',p.timeZone)}${ga4Row('Created',p.createTime ? new Date(p.createTime).toLocaleString() : null)}${ga4Row('Service level',p.serviceLevel)}</div><div class="ga-card"><h2>Configuration coverage</h2><div class="coverage-list">${coverage('Key events',a.keyEvents.length>0)}${coverage('Data streams',a.streams.length>0)}${coverage('Enhanced measurement',a.enhanced.length>0)}${coverage('Reporting identity',!!a.identity)}${coverage('Retention',!!a.retention)}${coverage('Google Ads',a.googleAds.length>0)}${coverage('BigQuery',a.bigQuery.length>0)}</div></div></div>`;
-    if(state.ga4.section==='property') return `<div class="module-head"><div><div class="module-kicker">PROPERTY</div><h1>Property settings</h1><p>Values returned by the Analytics Admin API.</p></div></div><div class="ga-card wide">${ga4Row('Property ID',id)}${ga4Row('Property name',p.displayName)}${ga4Row('Currency',p.currencyCode)}${ga4Row('Industry category',p.industryCategory)}${ga4Row('Reporting timezone',p.timeZone)}${ga4Row('Creation time',p.createTime ? new Date(p.createTime).toLocaleString() : null)}${ga4Row('Service level',p.serviceLevel)}<div class="api-note">Business objectives / some UI-only creation metadata may not be exposed by the Admin API and are intentionally not guessed.</div></div>`;
-    if(state.ga4.section==='streams') return `<div class="module-head"><div><div class="module-kicker">DATA COLLECTION</div><h1>Data streams <span class="n">${a.streams.length}</span></h1><p>Web and app streams configured in this property.</p></div></div><div class="ga-card wide">${a.streams.map(s=>`<div class="stream-card"><div><b>${esc(s.displayName||'Unnamed stream')}</b><span>${esc(s.type||'')} · ${esc((s.name||'').split('/').pop())}</span></div><div>${s.webStreamData?`<code>${esc(s.webStreamData.measurementId||'')}</code>`:s.androidAppStreamData?`<span>${esc(s.androidAppStreamData.packageName||'Android')}</span>`:s.iosAppStreamData?`<span>${esc(s.iosAppStreamData.bundleId||'iOS')}</span>`:''}</div></div>`).join('')||'<div class="empty"><b>No streams returned</b></div>'}</div>`;
-    if(state.ga4.section==='events') return `<div class="module-head"><div><div class="module-kicker">CONVERSION CONFIGURATION</div><h1>Key events <span class="n">${a.keyEvents.length}</span></h1><p>Events currently marked as key events in the property.</p></div></div><div class="ga-card wide"><table class="ga-table"><thead><tr><th>Event</th><th>Resource</th><th>Type</th></tr></thead><tbody>${a.keyEvents.map(e=>`<tr><td><b>${esc(e.eventName||'')}</b></td><td class="mono">${esc(e.name||'')}</td><td>${ga4Status(true,'Key event')}</td></tr>`).join('')||'<tr><td colspan="3" class="empty">No key events configured.</td></tr>'}</tbody></table></div>`;
-    if(state.ga4.section==='enhanced') return `<div class="module-head"><div><div class="module-kicker">WEB STREAM SETTINGS</div><h1>Enhanced measurement</h1><p>Automatic interaction measurement for web streams.</p></div></div>${a.enhanced.map(x=>{const e=x.settings||{}; const s=x.stream; return `<div class="ga-card wide"><div class="stream-title"><h2>${esc(s.displayName||'Web stream')}</h2>${ga4Status(e.streamEnabled!==false,e.streamEnabled===false?'Disabled':'Enabled')}</div><div class="toggle-grid">${toggle('Page changes',e.pageChangesEnabled)}${toggle('Scrolls',e.scrollsEnabled)}${toggle('Outbound clicks',e.outboundClicksEnabled)}${toggle('Site search',e.siteSearchEnabled)}${toggle('Video engagement',e.videoEngagementEnabled)}${toggle('File downloads',e.fileDownloadsEnabled)}${toggle('Form interactions',e.formInteractionsEnabled)}</div><div class="api-note">Search parameter: ${esc(e.searchQueryParameter||'Not set')} · Additional URI parameter: ${esc(e.uriQueryParameter||'Not set')}</div></div>`}).join('')||'<div class="ga-card wide"><div class="empty"><b>No web streams available</b></div></div>'}`;
-    if(state.ga4.section==='identity') return `<div class="module-head"><div><div class="module-kicker">USER REPORTING</div><h1>Reporting identity</h1><p>How GA4 deduplicates users in reports.</p></div></div><div class="ga-card wide"><div class="identity-big">${esc(a.identity?.reportingIdentity||a.identity?.identitySpace||'Not available')}</div><p class="muted">Google's Data API uses the property's reporting identity, so this setting affects reported user counts and deduplication.</p></div>`;
-    if(state.ga4.section==='retention') return `<div class="module-head"><div><div class="module-kicker">DATA GOVERNANCE</div><h1>Data retention</h1><p>Event-level and user-level retention settings.</p></div></div><div class="ga-grid"><div class="ga-card">${ga4Row('Event data retention',prettyEnum(a.retention?.eventDataRetention))}${ga4Row('User data retention',prettyEnum(a.retention?.userDataRetention))}${ga4Row('Reset on new activity',a.retention?.resetUserDataOnNewActivity==null?null:(a.retention.resetUserDataOnNewActivity?'Enabled':'Disabled'))}</div><div class="ga-card"><h2>Audit note</h2><p class="muted">Longer retention periods may have availability restrictions depending on property type/service level.</p></div></div>`;
-    if(state.ga4.section==='definitions') return `<div class="module-head"><div><div class="module-kicker">CUSTOM SCHEMA</div><h1>Custom definitions</h1></div></div><div class="ga-grid"><div class="ga-card"><h2>Custom dimensions · ${a.dimensions.length}</h2>${a.dimensions.map(d=>`<div class="def-row"><b>${esc(d.displayName||d.parameterName||'Unnamed')}</b><span>${esc(d.parameterName||'')} · ${esc(d.scope||'')}</span></div>`).join('')||'<div class="empty">None returned.</div>'}</div><div class="ga-card"><h2>Custom metrics · ${a.metrics.length}</h2>${a.metrics.map(d=>`<div class="def-row"><b>${esc(d.displayName||d.parameterName||'Unnamed')}</b><span>${esc(d.parameterName||'')} · ${esc(d.scope||'')}</span></div>`).join('')||'<div class="empty">None returned.</div>'}</div></div>`;
-    if(state.ga4.section==='filters') return `<div class="module-head"><div><div class="module-kicker">DATA QUALITY</div><h1>Data filters <span class="n">${a.filters.length}</span></h1><p>Property filters returned by the Admin API.</p></div></div><div class="ga-card wide">${a.filters.map(f=>`<div class="def-row"><b>${esc(f.displayName||'Unnamed filter')}</b><span>${esc(f.type||'')} · ${esc(f.state||'')}</span></div>`).join('')||'<div class="empty"><b>No data filters returned</b></div>'}</div>`;
-    if(state.ga4.section==='integrations') return `<div class="module-head"><div><div class="module-kicker">CONNECTED SERVICES</div><h1>Integrations</h1></div></div><div class="ga-grid"><div class="ga-card"><h2>Google Ads</h2>${a.googleAds.length?a.googleAds.map(x=>`<div class="def-row"><b>${esc(x.customerId||x.displayName||'Linked account')}</b><span>${esc(x.name||'')}</span></div>`).join(''):ga4Status(false,'No links returned')}</div><div class="ga-card"><h2>BigQuery</h2>${a.bigQuery.length?a.bigQuery.map(x=>`<div class="def-row"><b>${esc(x.projectId||'Project')}</b><span>${esc(x.datasetLocation||'')}</span></div>`).join(''):ga4Status(false,'No links returned')}</div><div class="ga-card"><h2>Google Signals</h2>${a.signals?ga4Status(true, a.signals.state||'Configured'):ga4Status(false,'Not available')}</div></div>`;
-    if(state.ga4.section==='audiences') return `<div class="module-head"><div><div class="module-kicker">AUDIENCE MANAGEMENT</div><h1>Audiences <span class="n">${a.audiences.length}</span></h1></div></div><div class="ga-card wide">${a.audiences.map(x=>`<div class="def-row"><b>${esc(x.displayName||'Unnamed audience')}</b><span>${esc(x.name||'')}</span></div>`).join('')||'<div class="empty"><b>No audiences returned</b></div>'}</div>`;
-    if(state.ga4.section==='acquisition') return `<div class="module-head"><div><div class="module-kicker">ACQUISITION</div><h1>Referral & acquisition settings</h1><p>Some referral-exclusion controls are not exposed by the current public Admin API. Digital Lens will never infer or invent those values.</p></div></div><div class="ga-card wide"><div class="api-note"><b>Referral exclusions:</b> not reliably available through the current public Admin API surface. For a definitive audit, this field should be validated in the GA4 UI or through an exported configuration when Google exposes it.</div></div>`;
-    return '';
+  async function ga4Load(id, site) {
+    const g = state.ga4;
+    const v = TSD.ga4public.validateId(id);
+    g.id = String(id || '').trim().toUpperCase();
+    g.site = String(site || '').trim();
+    if (!v.ok) { g.error = v.error; g.report = null; render(); return; }
+    g.id = v.id;
+    g.loading = true; g.error = ''; render(); busy(true);
+    track('decodeStarted', 'ga4_inspector');
+    try {
+      g.report = await TSD.ga4public.inspect(v.id, TSD.net.fetchText, { siteUrl: g.site || null });
+      g.section = 'overview';
+      history.replaceState(null, '', `#ga4?id=${encodeURIComponent(v.id)}${g.site ? '&site=' + encodeURIComponent(g.site) : ''}`);
+      track('decodeSuccess', { input_type: 'ga4_inspector', container_id: v.id, status: g.report.status });
+    } catch (e) {
+      g.report = null;
+      g.error = e.friendly ? `${e.friendly} ${e.report ? e.report.attempts.map((a) => `${a.endpoint}: ${a.outcome}`).join(' ') : ''}` : (e.message || 'The inspection failed.');
+      track('decodeError', 'ga4_inspector');
+    } finally { g.loading = false; busy(false); render(); }
   }
-  function coverage(name,ok){return `<div class="coverage-row"><span class="coverage-dot ${ok?'ok':'pending'}"></span><span>${esc(name)}</span><b>${ok?'Available':'Needs review'}</b></div>`;}
-  function toggle(name,val){return `<div class="toggle-item"><span>${esc(name)}</span>${ga4Status(!!val,val?'On':'Off')}</div>`;}
-  function prettyEnum(v){return v?String(v).replace(/_/g,' ').replace(/\b\w/g,m=>m.toUpperCase()):null;}
-  async function ga4LoadByInput(v){
-    try { if(!state.ga4.connected) await ga4Connect(); const prop=v.replace(/^properties\//,'').trim(); if(/^G-/i.test(prop)){ throw new Error('A Measurement ID identifies a web data stream. After connecting, choose the matching GA4 property from your accessible properties.'); } await ga4Run(prop); } catch(e){ state.ga4.error=e.message; render(); }
+
+  function ga4LoadPasted(id, text) {
+    const g = state.ga4;
+    try { g.report = TSD.ga4public.inspectSource(id, text); g.id = g.report.measurementId; g.section = 'overview'; g.error = ''; }
+    catch (e) { g.error = e.message; g.report = null; }
+    render();
   }
-  async function ga4Connect(){
-    state.ga4.error=''; render(); await TSD_GA4.connect(); state.ga4.connected=true; const acc=await TSD_GA4.accounts(); const props=[]; (acc.accountSummaries||[]).forEach(ac=>(ac.propertySummaries||[]).forEach(pr=>{ const id=(pr.property||'').split('/').pop(); if(id) props.push({id,displayName:pr.displayName||id}); })); state.ga4.properties=props; render();
-  }
-  async function ga4AuditMeasurement(id){
-    state.ga4.loading=true; state.ga4.error=''; render();
-    try { const props=state.ga4.properties||[]; for(const pr of props){ const st=await TSD_GA4.streams(pr.id); const found=(st.dataStreams||[]).find(x=>x.webStreamData&&String(x.webStreamData.measurementId||'').toUpperCase()===id.toUpperCase()); if(found){ await ga4Run(pr.id); return; } } throw new Error('No accessible GA4 property matched ' + id + '. Make sure the connected Google account has access to the property.'); } catch(e){ state.ga4.error=e.message; state.ga4.loading=false; render(); }
-  }
-  async function ga4Run(id){ state.ga4.loading=true; state.ga4.error=''; render(); try { state.ga4.audit=await TSD_GA4.audit(id); state.ga4.propertyId=id; state.ga4.section='overview'; } catch(e){ state.ga4.error=e.message; } finally { state.ga4.loading=false; render(); } }
-  function bindGA4(){
-    document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.mode)));
-    document.querySelectorAll('[data-ga4-section]').forEach(b=>b.addEventListener('click',()=>{state.ga4.section=b.dataset.ga4Section;render();}));
-    const c=$('#connectGa4'); if(c)c.addEventListener('click',ga4Connect);
-    const save=$('#saveGa4Client'); if(save)save.addEventListener('click',()=>{TSD_GA4.setClientId($('#ga4ClientId').value.trim()); notice('GA4 OAuth client ID saved locally in this browser.');});
-    const refresh=$('#ga4Refresh'); if(refresh)refresh.addEventListener('click',()=>ga4Run(state.ga4.propertyId));
-    const ps=$('#ga4PropertySelect'); if(ps)ps.addEventListener('change',()=>state.ga4.propertyId=ps.value);
-    const ap=$('#auditProperty'); if(ap)ap.addEventListener('click',()=>{ if(!state.ga4.propertyId) return (state.ga4.error='Select a GA4 property first.',render()); ga4Run(state.ga4.propertyId); });
-    const am=$('#auditMeasurement'); if(am)am.addEventListener('click',()=>{const id=$('#ga4MeasurementId').value.trim(); if(!/^G-[A-Z0-9]+$/i.test(id)) return (state.ga4.error='Enter a valid GA4 Measurement ID such as G-XXXXXXXXXX.',render()); ga4AuditMeasurement(id);});
-    const q=$('#websiteQuick'); const qb=$('#websiteQuickBtn'); if(qb)qb.addEventListener('click',()=>{const v=q.value.trim();if(v){setMode('website');decode({input:v});}});
+
+  function bindGA4() {
+    const form = $('#ga4Form');
+    if (form) form.addEventListener('submit', (e) => { e.preventDefault(); ga4Load($('#ga4Id').value, $('#ga4Site').value); });
+    const pg = $('#ga4PasteGo');
+    if (pg) pg.addEventListener('click', () => ga4LoadPasted($('#ga4Id').value, $('#ga4Paste').value));
+    document.querySelectorAll('[data-ga4-section]').forEach((b) => b.addEventListener('click', () => { state.ga4.section = b.dataset.ga4Section; render(); window.scrollTo(0, 0); }));
+    const rf = $('#ga4Refresh'); if (rf) rf.addEventListener('click', () => ga4Load(state.ga4.id, state.ga4.site));
+    const nw = $('#ga4New'); if (nw) nw.addEventListener('click', () => { state.ga4.report = null; state.ga4.error = ''; history.replaceState(null, '', '#ga4'); render(); });
+    const js = $('#ga4Json'); if (js) js.addEventListener('click', () => download(`${state.ga4.report.measurementId}_public_config.json`, JSON.stringify(state.ga4.report, null, 2), 'application/json'));
   }
 
   function collectGtmPlatformIds(containers) {
@@ -459,12 +587,31 @@
     if (site.unverifiedGtmIds && site.unverifiedGtmIds.length) {
       notes.unshift(`Unverified GTM-like reference(s) were excluded from the published container list: ${site.unverifiedGtmIds.length}`);
     }
+    const techs = site.technologies || [];
+    const techHtml = techs.length ? techs.map((t) => chip2(t.name, t.category)).join(' ') : '<span class="none">No specific CMS, ecommerce platform or framework signature detected</span>';
+    const cmds = site.gtagCommands || [];
+    const consentCmds = cmds.filter((c) => c.command === 'consent');
+    const showVal = (v) => (v && typeof v === 'object' ? (v.dynamic ? 'set at runtime' : JSON.stringify(v)) : String(v));
+    const consentHtml = consentCmds.length ? consentCmds.map((c) => `<div class="small"><b>${esc(c.mode === 'default' ? 'Default' : 'Update')}</b> · ${Object.entries(c.params).map(([k, v]) => `${esc(k)}: ${esc(showVal(v))}`).join(' · ')}</div>`).join('') : '<span class="none">No gtag(\'consent\') call in the page HTML</span>';
+    const ga4OnPage = [...new Set([...(site.hardcodedGtag || []), ...(site.gtagConfigCalls || [])])].filter((id) => /^(G|GT|AW|DC)-/.test(id));
+    const gtmGa4 = [...new Set((containers || []).flatMap((c) => c.summary.ga4Ids || []))];
+    const inspectLinks = [...new Set([...ga4OnPage, ...gtmGa4])].filter((id) => /^G-/.test(id));
     return `<div class="card" style="margin-bottom:16px"><div class="card-head"><h2>Website Insights</h2><span class="muted small">${esc(site.url)}</span></div><div class="card-body">
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px 28px;margin-bottom:16px">
         <div><div class="muted small" style="margin-bottom:4px">Built with</div><div style="font-weight:500">${esc(site.sitePlatform || 'Unknown')}</div></div>
         <div><div class="muted small" style="margin-bottom:4px">Verified GTM containers</div><div>${site.gtmIds.length ? site.gtmIds.map(id => chip2(id, 'published')).join(' ') : '<span class="none">None verified</span>'}</div></div>
         <div><div class="muted small" style="margin-bottom:4px">GTM verification</div><div class="small">${esc(statusParts.join(' · ') || 'No GTM references detected')}</div></div>
         <div><div class="muted small" style="margin-bottom:4px">GTM load time</div><div>${loadHtml}</div></div>
+      </div>
+      <div class="site-sec">
+        <div class="site-sec-title">TECHNOLOGY</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">${techHtml}</div>
+      </div>
+      <div class="site-sec">
+        <div class="site-sec-title">GOOGLE TAG ON THE PAGE</div>
+        <div class="small" style="margin-bottom:6px">${ga4OnPage.length ? 'Hardcoded Google tag IDs: ' + ga4OnPage.map((id) => `<code>${esc(id)}</code>`).join(' ') : '<span class="none">No hardcoded gtag.js / gtag(\'config\') found</span>'}</div>
+        ${consentHtml}
+        ${inspectLinks.length ? `<div class="inspect-links">${inspectLinks.map((id) => `<button type="button" class="btn-outline" data-inspect-ga4="${esc(id)}" data-site="${esc(site.url)}">Inspect ${esc(id)} in GA4 Inspector →</button>`).join('')}</div>` : ''}
       </div>
       <div style="border-top:1px solid var(--line-2,#e0e0e0);padding-top:14px;margin-bottom:12px">
         <div class="muted small" style="margin-bottom:8px;font-weight:600;letter-spacing:.04em">ON-PAGE / HARDCODED</div>
@@ -490,7 +637,7 @@
     const copy = v.unverified
       ? 'GTM-like references were found, but Google did not confirm them as published containers.'
       : 'The page was scanned, but no published GTM container could be decoded.';
-    return `<div class="page-head"><div><h1>${title}</h1><p>${copy}</p></div></div>${siteCard(site, [])}`;
+    return `<div class="page-head"><div><h1>${title}</h1><p>${copy}</p></div></div>${siteCard(site, state.result.containers || [])}`;
   }
 
   // ---------- summary strip (GTM Spy style) ----------
@@ -987,6 +1134,8 @@
     if (sort) { const k = sort.dataset.sort; state.sort = state.sort.key === k ? { key: k, dir: -state.sort.dir } : { key: k, dir: 1 }; render(); return; }
     if (sev) { state.sev = sev.dataset.sev; render(); return; }
     if (recent) { $('#q').value = recent.dataset.recent; decode({ input: recent.dataset.recent }); return; }
+    const inspectGa4 = t.closest('[data-inspect-ga4]');
+    if (inspectGa4) { setMode('ga4'); $('#q').value = inspectGa4.dataset.inspectGa4; ga4Load(inspectGa4.dataset.inspectGa4, inspectGa4.dataset.site || ''); return; }
     // Website Insights has its own scan button because the global header form is hidden in website mode.
     if (t.closest('#websiteQuickBtn')) {
       e.preventDefault();
@@ -1062,7 +1211,6 @@
     $('#proxyUrl').value = settings.proxyUrl || '';
     $('#proxyUrl').placeholder = (window.TSD_CONFIG && window.TSD_CONFIG.proxyUrl) || 'https://your-worker.your-subdomain.workers.dev';
     $('#showListeners').checked = settings.showListeners;
-    const ga4Setting = $('#ga4ClientIdSetting'); if (ga4Setting) ga4Setting.value = TSD_GA4.getClientId();
     $('#proxyResult').textContent = '';
     $('#clearSnaps').textContent = `Clear saved snapshots (${TSD.snapshots.count()})`;
     settingsDialog.showModal();
@@ -1087,7 +1235,6 @@
   $('#clearSnaps').addEventListener('click', () => { TSD.snapshots.clearAll(); $('#clearSnaps').textContent = 'Cleared'; });
   $('#settingsForm').addEventListener('submit', () => {
     const prevProxy = settings.proxyUrl;
-    const ga4Setting = $('#ga4ClientIdSetting'); if (ga4Setting) TSD_GA4.setClientId(ga4Setting.value.trim());
     settings = TSD.settings.set({
       style: (settingsDialog.querySelector('input[name="style"]:checked') || {}).value || 'readable',
       proxyUrl: $('#proxyUrl').value.trim(),
@@ -1102,12 +1249,17 @@
   render();
   refreshBackend().then(() => {
     const m = /#q=([^&]+)/.exec(location.hash);
-    const modeMatch = /#(gtm|ga4|website)/.exec(location.hash);
+    const modeMatch = /^#(gtm|ga4|website)\b/.exec(location.hash);
     if (modeMatch) setMode(modeMatch[1]);
+    if (modeMatch && modeMatch[1] === 'ga4') {
+      const p = new URLSearchParams(location.hash.replace(/^#ga4\??/, ''));
+      if (p.get('id')) { $('#q').value = p.get('id'); ga4Load(p.get('id'), p.get('site') || ''); }
+      return;
+    }
     if (m) {
       const v = decodeURIComponent(m[1]);
       $('#q').value = v;
-      if (state.mode === 'ga4') ga4LoadByInput(v); else decode({ input: v });
+      if (/^(G|GT|AW|DC)-[A-Z0-9]{4,15}$/i.test(v)) { setMode('ga4'); ga4Load(v, ''); } else decode({ input: v });
     }
   });
 })();
