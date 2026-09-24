@@ -252,7 +252,7 @@
     { name: 'Snapchat Pixel', category: 'Advertising', re: /sc-static\.net|snaptr\s*\(/i, ids: [/snaptr\s*\(\s*['"]init['"]\s*,\s*['"]([a-f0-9-]{20,40})['"]/i] },
     { name: 'Pinterest Tag', category: 'Advertising', re: /s\.pinimg\.com|pintrk\s*\(/i, ids: [/pintrk\s*\(\s*['"]load['"]\s*,\s*['"]?(\d{8,20})/i] },
     { name: 'LinkedIn Insight', category: 'Advertising', re: /snap\.licdn\.com|px\.ads\.linkedin\.com|_linkedin_partner_id|lintrk/i, ids: [/_linkedin_partner_id\s*=\s*['"]?(\d{4,20})/i] },
-    { name: 'Microsoft UET', category: 'Advertising', re: /bat\.bing\.com|uetq/i, ids: [/uetq\\?['"]tagId['"]?\\?\s*[:=]\\?\s*['"]([A-Z0-9-]{6,30})/i] },
+    { name: 'Microsoft UET', category: 'Advertising', re: /bat\.bing\.com|uetq/i, ids: [/\bti\s*[:=]\s*['"]?([0-9]{5,12})/i] },
     { name: 'Reddit Pixel', category: 'Advertising', re: /redditstatic\.com|rdt\s*\(/i, ids: [/rdt\s*\(\s*['"]init['"]\s*,\s*['"]([A-Z0-9_-]{8,40})/i] },
     { name: 'X (Twitter) Pixel', category: 'Advertising', re: /static\.ads-twitter\.com|twq\s*\(/i, ids: [] },
     { name: 'Quora Pixel', category: 'Advertising', re: /a\.quora\.com|qp\s*\(/i, ids: [] },
@@ -271,8 +271,8 @@
     { name: 'Segment', category: 'Customer Data', re: /cdn\.segment\.com|analytics\.load/i, ids: [] },
     { name: 'PostHog', category: 'Product Analytics', re: /posthog|app\.posthog\.com/i, ids: [] },
     { name: 'Snowplow', category: 'Analytics', re: /snowplow|collector\./i, ids: [] },
-    { name: 'Microsoft Clarity', category: 'Session Replay', re: /clarity\.ms|clarity\s*\(/i, ids: [/clarity\.js\?tag=([a-z0-9_-]{8,20})/i] },
-    { name: 'Hotjar', category: 'Session Replay', re: /hotjar|static\.hotjar\.com/i, ids: [/hjid\\?\s*[:=]\\?\s*(\\d{4,12})/i] },
+    { name: 'Microsoft Clarity', category: 'Session Replay', re: /clarity\.ms|clarity\s*\(/i, ids: [/clarity\.ms\/tag\/([a-z0-9]{6,20})/i, /["']clarity["']\s*,\s*["']script["']\s*,\s*["']([a-z0-9]{6,20})["']/i] },
+    { name: 'Hotjar', category: 'Session Replay', re: /hotjar|static\.hotjar\.com/i, ids: [/hjid\s*[:=]\s*(\d{4,12})/i, /hotjar-(\d{4,12})\.js/i] },
     { name: 'FullStory', category: 'Session Replay', re: /fullstory\.com|fullstory/i, ids: [] },
     { name: 'Mouseflow', category: 'Session Replay', re: /mouseflow\.com|mouseflow/i, ids: [] },
     { name: 'Lucky Orange', category: 'Session Replay', re: /luckyorange\.com|luckyorange/i, ids: [] },
@@ -299,14 +299,16 @@
     const out = [];
     for (const rule of INTEGRATION_RULES) {
       if (!rule.re.test(text)) continue;
-      const ids = uniq((rule.ids || []).flatMap((re) => {
+      const all = (rule.ids || []).flatMap((re) => {
         const matches = [...text.matchAll(new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g'))];
         return matches.map((m) => m[1] || m[0]).filter(Boolean);
-      }));
+      });
+      const ids = uniq(all.map((x) => (/^(G|AW|DC|GT|GTM)-/i.test(x) ? x.toUpperCase() : x)));
       out.push({
         name: rule.name,
         category: rule.category,
         ids,
+        count: Math.max(1, all.length),
         evidence: ids.length ? 'ID detected in page HTML' : 'Platform signature detected in page HTML',
       });
     }

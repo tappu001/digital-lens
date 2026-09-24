@@ -265,6 +265,21 @@
     return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(d) ? d : null;
   }
 
+  // Cross-domain and unwanted-referral rules in the Google tag are match conditions, not
+  // necessarily full domains: "paypal", "klarna", "buy\\.syf\\.com". Every rule is kept;
+  // regex escapes are removed only for display.
+  function ruleValues(v) {
+    const out = [];
+    const walk = (x) => {
+      if (typeof x === 'string') { const t = x.trim(); if (t) out.push(t); }
+      else if (Array.isArray(x)) x.forEach(walk);
+      else if (x && typeof x === 'object' && !isDynamic(x) && !isMacroRef(x)) Object.values(x).forEach(walk);
+    };
+    walk(v);
+    return [...new Set(out)];
+  }
+  const readableRule = (s) => String(s).trim().replace(/^\^/, '').replace(/\$$/, '').replace(/\\(.)/g, '$1');
+
   function addLinkerDomain(report, domain, source, location) {
     if (!report.linker.domains.some((x) => x.domain === domain)) report.linker.domains.push({ domain, source: source.label, location });
   }
@@ -412,15 +427,16 @@
         if (p.googleSignals != null) F('google_signals', p.googleSignals, 'Google signals', 'privacy');
         return;
       case '__ogt_cross_domain': {
-        const domains = linkerDomains(p.rules != null ? p.rules : p);
+        const domains = ruleValues(p.rules).map(readableRule);
         domains.forEach((d) => addLinkerDomain(report, d, source, `${loc}.vtp_rules`));
         F('cross_domain', domains.length ? `${domains.length} domain rule${domains.length === 1 ? '' : 's'}` : 'Template present', 'Cross-domain linker', 'linker');
         Object.entries(p).forEach(([k, v]) => { if (k !== 'rules') { report.linker.settings.push({ key: camelToSnake(k), value: show(v), source: source.label, location: `${loc}.vtp_${k}` }); } });
         return;
       }
       case '__ogt_referral_exclusion': {
-        const list = linkerDomains(p.includeConditions != null ? p.includeConditions : p);
-        list.forEach((d) => { if (!report.referralExclusions.some((x) => x.domain === d)) report.referralExclusions.push({ domain: d, source: source.label, location: loc }); });
+        const raw = ruleValues(p.includeConditions);
+        raw.forEach((r) => { const d = readableRule(r); if (!report.referralExclusions.some((x) => x.domain === d)) report.referralExclusions.push({ domain: d, rule: r, source: source.label, location: loc }); });
+        const list = report.referralExclusions.map((x) => x.domain);
         F('unwanted_referrals', list.length ? list.join(', ') : 'Template present', 'Unwanted referrals', 'linker');
         return;
       }

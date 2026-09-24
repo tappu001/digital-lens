@@ -38,29 +38,22 @@ Every row expands to show its details (event names and conditions, domains, sett
 
 ### 3. Website Insights
 
-Give Digital Lens a public website URL. The website scanner uses the configured Cloudflare Worker to fetch the page HTML and then independently detects:
+Give Digital Lens a public website URL. It scans the page HTML and every published GTM container on the page, then shows one **Platforms on this website** table:
 
-- Website/CMS platform
-- GTM containers, verified against Google's published gtm.js response
-- GTM-like references that could not be verified, excluded from the verified container list
-- Known CMS placeholder IDs (for example `GTM-OVERRIDE`) ignored before any Google container request
-- Google tag / GA4 / Google Ads IDs
-- Meta Pixel
-- TikTok Pixel
-- Snapchat Pixel
-- LinkedIn Insight
-- Microsoft Clarity
-- Pinterest
-- Hotjar
-- GTM/custom tracking script loaders
-- On-page versus GTM-based tracking observations
-- **GTM Integrated Platforms**: platforms discovered inside decoded GTM tags, custom HTML, image tags, and community/custom templates
-- Platform-specific IDs where the published GTM configuration exposes them (GA4, Google Ads, Meta, TikTok, Snapchat, Pinterest, LinkedIn, Microsoft UET, Clarity, Hotjar, MoEngage, and Klaviyo where identifiable)
-- Separate website technology inventory so a platform detected in page HTML is not incorrectly presented as a GTM implementation
-- Technology fingerprints (CMS, ecommerce platform, website builder, JavaScript framework, CDN) from specific signatures rather than bare words
-- Google tag on the page: hardcoded IDs and `gtag('consent')` default/update calls, with a one-click link into the GA4 Inspector
+| Column | Meaning |
+| --- | --- |
+| Platform | GA4, Google Ads, Meta Pixel, TikTok, LinkedIn, Pinterest, Snapchat, Microsoft UET, Clarity, Hotjar, Klaviyo… grouped by category |
+| IDs | Measurement ID / pixel ID / partner ID, each labelled with where it was found (On page or the GTM container) |
+| Implemented | **On page** (written in the HTML, hardcoded) and/or the **GTM container** it is a tag in |
+| Count | How many times: `On page ×2`, `GTM-XXXX: 5 tags (1 paused)` |
 
-Website Insights is not the GTM Audit. A website can be scanned even when no GTM container is found.
+A summary row shows the CMS / ecommerce platform, GTM containers with load time, and how many platforms are on page only, via GTM only, or both. GA4 IDs link straight to the GA4 Inspector.
+
+Tools injected only after the page runs JavaScript (or by Shopify customer events) are not in the HTML and cannot be seen by a static scan.
+
+### Navigation
+
+Every workspace has its own address, so browser back/forward, refresh and shared links work: `app.html#gtm?q=GTM-XXXX&view=triggers`, `app.html#ga4?id=G-XXXX`, `app.html#website?url=https://example.com`. The landing page links straight to each workspace.
 
 ---
 
