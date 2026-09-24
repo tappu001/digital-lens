@@ -52,6 +52,12 @@
     const started = Date.now();
 
     if (source && source.trim()) {
+      // A container export (Admin → Export container) is JSON with real workspace names.
+      if (TSD.gtmexport && TSD.gtmexport.isExport(source)) {
+        result.containers.push(TSD.gtmexport.decode(source, { weightBytes: byteLength(source) }));
+        result.tookMs = Date.now() - started;
+        return result;
+      }
       const data = TSD.parser.extractContainerData(source);
       const c = TSD.decoder.decodeContainer(data, { containerId: TSD.parser.guessContainerId(source) || 'Pasted script', kind: 'pasted', weightBytes: byteLength(source) });
       c.findings = TSD.audit.runAudit(c, {});

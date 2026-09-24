@@ -191,5 +191,35 @@ function fakeFetch(routes, log = []) {
   assert.ok(!TSD.sitescan.detectTechnologies('<p>We react quickly to angular questions</p>').length, 'no false positives from prose');
   assert.strictEqual(TSD.sitescan.detectSitePlatform('<p>react</p>'), 'Custom / Unknown');
 
+  // ---------- GA4-style view ----------
+  const view = G.spyView(r);
+  const stat = (l) => view.stats.find((x) => x.label === l).value;
+  assert.strictEqual(stat('Version'), 'v1');
+  assert.strictEqual(stat('Key Events'), 2);
+  assert.strictEqual(stat('Create Events'), 1);
+  assert.strictEqual(stat('Modify Events'), 1);
+  assert.strictEqual(stat('Cross-domain'), 2);
+  assert.strictEqual(stat('Unwanted Referrals'), 2);
+  const row = (k) => view.sections.flatMap((x) => x.rows).find((x) => x.key === k);
+  assert.deepStrictEqual(view.sections.map((x) => x.title), ['Events', 'Google tag', 'Data collection']);
+  assert.ok(row('enhanced').toggle && row('enhanced').chips.includes('Site search') && !row('enhanced').chips.includes('Video engagement'));
+  assert.deepStrictEqual(row('create').items[0].lines.slice(0, 2), ['event_name equals page_view', 'page_location contains /thank-you']);
+  assert.ok(row('modify').items[0].lines.includes('Set method = email'));
+  assert.deepStrictEqual(row('key').items.map((x) => x.title), ['purchase', 'generate_lead']);
+  assert.strictEqual(row('signals').desc, 'Advertising features signal: ENABLED');
+  assert.strictEqual(row('geo').desc, 'Disabled in DE, FR');
+  assert.strictEqual(row('dma').badges[0], 'DENIED');
+  assert.strictEqual(row('session').lines[0].value, '0h 45m');
+  assert.ok(view.other.includes('__ccd_future_feature'));
+  assert.ok(!JSON.stringify(view).match(/__utm|"__ga"/), 'no cookie names anywhere in the view');
+  // a bare payload: nothing configured => zero counts, no invented rows
+  const bare = G.spyView(rThin);
+  assert.strictEqual(bare.stats.find((x) => x.label === 'Key Events').value, 0);
+  assert.ok(!bare.sections.flatMap((x) => x.rows).some((x) => ['signals', 'geo', 'upd', 'dma', 'redact'].includes(x.key)), 'rows without a template are omitted');
+
+  // website URL -> Measurement IDs it loads
+  const found = await G.findIdsOnWebsite('https://shop.example.com', siteFetch);
+  assert.deepStrictEqual(found.ids.map((x) => x.id), ['G-EJPKTC03EM', 'G-ABC123XYZ']);
+
   console.log('All GA4 Inspector checks passed (' + r.fields.length + ' evidence rows, ' + r.destinations.length + ' destinations).');
 })().catch((e) => { console.error(e); process.exit(1); });

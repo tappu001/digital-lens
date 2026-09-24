@@ -13,51 +13,28 @@ and public Google tag / GA4 configuration do not get mixed together.
 
 ### 1. GTM Audit
 
-Give Digital Lens a published GTM container ID or `gtm.js` URL. It decodes the published container and presents:
+Give Digital Lens a GTM container ID, a website URL, or paste container code (a published `gtm.js` response or a container export JSON). It shows:
 
-- Tags
-- Triggers
-- Variables
-- Templates
-- Findings
-- Statistics
-- Version changes
-- Raw published configuration
-- Human-readable generated names
+- **Tags**: clean names such as `Google Ads Remarketing — AW-123456789`, `Google Tag — G-XXXXXXX`, `Custom HTML — Meta Pixel`; paused tags are highlighted and keep their original type, e.g. `Custom HTML (Paused) - Custom Event — purchase`
+- **Triggers**: `All Pages`, `Custom Event — purchase`, `All Clicks — Click ID contains submit`
+- **Variables**: type, value and where each one is used
+- **Stats**: IDs by platform (GA4, Google Ads, Meta, TikTok, LinkedIn, Pinterest, Clarity…), tags/triggers/variables by type
+- Container header: tags, triggers, variables, destinations, IDs, weight, and load time when a website was given
 
-Important: GTM removes real workspace names from the published container. Digital Lens therefore generates descriptive names from the item's settings. It does not claim that generated names are the original GTM names.
+Published containers don't keep workspace names, so names are generated from each item's settings. A container export JSON keeps the real names, and those are used as-is.
 
-### 2. GA4 Inspector (public Google tag configuration)
+### 2. GA4 Inspector
 
-Give Digital Lens a public Measurement ID such as `G-EJPKTC03EM` (Google tag `GT-`, Google Ads `AW-` and Floodlight `DC-` IDs are also accepted). **No Google login, OAuth or GA4 Admin API access is used.**
+Enter a Measurement ID (`G-XXXXXXXXXX`) or a website URL (Digital Lens finds the Measurement IDs it loads). **No Google login, OAuth or GA4 Admin API.**
 
-Digital Lens validates the ID, requests the public Google tag response through the fetch proxy:
+Digital Lens reads the public Google tag Google serves for the ID (`https://www.googletagmanager.com/gtm.js?id=G-…`, falling back to `gtag/js?id=G-…`) and lays it out with GA4's own setting names:
 
-```text
-https://www.googletagmanager.com/gtm.js?id=G-EJPKTC03EM     (primary)
-https://www.googletagmanager.com/gtag/js?id=G-EJPKTC03EM    (fallback)
-```
+- **Header**: Version, Key Events, Create Events, Modify Events, Cross-domain, Unwanted Referrals
+- **Events**: Enhanced measurement, Create custom events, Modify events, Key events, Redact data
+- **Google tag**: Configure your domains, Define internal traffic, List unwanted referrals, Adjust session timeout, Override cookie settings, Allow user-provided data capabilities, Connected site tags, Manage default consent settings for data collection
+- **Data collection**: Google signals, Granular location and device data collection, User-provided data collection
 
-and parses the `var data = {…}` configuration block without executing it. Settings are read only from explicit Google tag template entries, so cookie names (`__ga`, `__utma`…) or library variables can never be reported as events. When present in the public response, it reports:
-
-- Destination IDs (G-, GT-, AW-, DC-) and conversion labels
-- Enhanced measurement templates (page views, scrolls, outbound clicks, site search, video, file downloads, forms)
-- Key event rules, create-event rules and modify-event rules
-- Cross-domain linker domains and unwanted referrals
-- Google signals, region-specific data controls, data redaction, user-provided data collection, internal traffic rules, EEA/DMA settings, session settings
-
-Optionally add a **website URL**. Digital Lens then compares the site with the ID:
-
-- `gtag('config', …)` / `gtag('set', …)` values in the page HTML: `send_page_view`, `allow_google_signals`, `ads_data_redaction`, `url_passthrough`, cookie settings, linker, `server_container_url` and `transport_url` (kept separate), campaign and page fields
-- `gtag('consent', 'default' | 'update', …)`: shown separately
-- `gtag('event', …)` calls for this ID
-- Verified GTM containers that reference the ID, their Google tag settings and GA4 event tags
-
-Every value has an **Evidence** row (field, value, source, location). Sources are always labelled: *Google tag response (gtm.js / gtag.js)*, *Website HTML* or *GTM container*. `user_id` / `client_id` values are never displayed, only that they are configured. Values set at runtime are shown as runtime values, not guessed. Anything not found is shown as **Not publicly exposed**.
-
-Inspection status is one of *Public configuration detected*, *Partial public configuration* or *No readable public configuration*. If the proxy is unavailable, the Google tag response can be pasted instead.
-
-**Limitation:** private GA4 Admin settings, reports, audiences, custom definitions, data retention, product links and account-level configuration are not publicly exposed and are never shown or inferred. (The earlier OAuth-based GA4 Property Audit has been removed.)
+Every row expands to show its details (event names and conditions, domains, settings). Only settings present in the public tag are shown. Cookie names and library code are never reported as events. Private GA4 settings (reports, audiences, custom definitions, retention, product links) are not in the public tag and are not shown. If the proxy is unavailable, the Google tag response can be pasted instead.
 
 ### 3. Website Insights
 

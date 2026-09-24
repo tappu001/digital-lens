@@ -309,6 +309,7 @@
     N.dedupe(triggers, 'readable', (x) => x.index);
     N.dedupe(triggers, 'convention', (x) => x.index);
     N.dedupe(triggers, 'emdash', (x) => x.index);
+    N.dedupe(triggers, 'spy', (x) => x.index);
 
     // sequencing
     const seqRefs = new Set();
@@ -332,12 +333,15 @@
       const blocking = triggers.filter((tr) => tr.blocks.includes(t.index)).map((tr) => tr.index);
       t.context = firing.length ? N.triggerContext(triggers[firing[0]]) : '';
       const names = N.tagNames(t, nameCtx);
+      names.spy = N.spyTagName(t, nameCtx, firing.length ? triggers[firing[0]].names.spy : '');
+      const originalType = t.paused ? N.spyTypeName('__' + String(lit(raw.vtp_originalTagType) || '').replace(/^_+/, '')) : null;
       return {
         index: t.index,
         id: t.id,
         fn: t.fn,
         names,
         type: t.type,
+        spyType: originalType || N.spyTypeName(t.fn),
         badge: t.badge,
         category: t.category,
         isListener: t.isListener,
@@ -362,6 +366,7 @@
     N.dedupe(finalTags, 'readable', (x) => (x.id != null ? x.id : x.index));
     N.dedupe(finalTags, 'convention', (x) => (x.id != null ? x.id : x.index));
     N.dedupe(finalTags, 'emdash', (x) => (x.id != null ? x.id : x.index));
+    N.dedupe(finalTags, 'spy', (x) => (x.id != null ? x.id : x.index));
 
     // variables with usage
     const usage = macros.map(() => ({ tags: new Set(), triggers: new Set(), variables: new Set() }));

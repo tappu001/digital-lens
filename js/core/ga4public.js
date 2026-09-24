@@ -663,5 +663,175 @@
     return finalize(report);
   }
 
-  TSD.ga4public = { validateId, endpoints, inspect, inspectSource, parsePayload, LIMITATIONS, TEMPLATES };
+  // ---------- GA4-style view ----------
+  // Groups what the public Google tag contains the way GA4 itself labels the settings
+  // (Admin → Data streams → Web stream / Configure tag settings / Data collection).
+  const OP_LABEL = { eq: 'equals', cn: 'contains', sw: 'starts with', ew: 'ends with', re: 'matches regex', rei: 'matches regex (ignore case)', lt: 'less than', le: 'less than or equal to', gt: 'greater than', ge: 'greater than or equal to', ne: 'does not equal' };
+
+  function operandText(v) {
+    if (!v || typeof v !== 'object') return show(v);
+    if (v.type === 'event_name') return 'event_name';
+    if (v.type === 'event_param') return (v.event_param && v.event_param.param_name) || 'parameter';
+    if (v.type === 'const') return show(v.const_value);
+    return show(v);
+  }
+  function predicateText(pred) {
+    if (!pred || typeof pred !== 'object') return '';
+    if (Array.isArray(pred.values) && pred.values.length >= 2) {
+      const op = OP_LABEL[pred.type] || String(pred.type || '');
+      return `${operandText(pred.values[0])} ${pred.negate ? 'not ' : ''}${op} ${operandText(pred.values[1])}`;
+    }
+    return '';
+  }
+  function conditionTexts(rule) {
+    const out = [];
+    const walk = (n, depth) => {
+      if (!n || typeof n !== 'object' || depth > 12) return;
+      if (Array.isArray(n)) { n.forEach((x) => walk(x, depth + 1)); return; }
+      const t = predicateText(n);
+      if (t) { out.push(t); return; }
+      Object.values(n).forEach((x) => walk(x, depth + 1));
+    };
+    walk(rule, 0);
+    return [...new Set(out)];
+  }
+  function overrideTexts(rule) {
+    const src = rule && (rule.parameter_overrides || rule.param_overrides || rule.parameters || rule.modifications);
+    const out = [];
+    const walk = (n) => {
+      if (Array.isArray(n)) n.forEach(walk);
+      else if (n && typeof n === 'object') {
+        const k = n.param_name || n.parameter || n.name || n.key;
+        if (typeof k === 'string') {
+          const v = n.param_value != null ? n.param_value : n.value != null ? n.value : n.new_value;
+          out.push(v != null && typeof v !== 'object' ? `${k} = ${v}` : isMacroRef(v) ? `${k} = {{${v.macro}}}` : k);
+        } else Object.values(n).forEach(walk);
+      }
+    };
+    walk(src);
+    return out;
+  }
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many || one + 's'}`;
+  const truthy = (v) => v === true || v === 'true' || v === 'ENABLED' || v === 'ON' || v === 1;
+
+  function spyView(report) {
+    const tpl = (fn) => report.templates.filter((t) => t.fn === fn);
+    const first = (fn) => tpl(fn)[0];
+    const em = report.enhanced;
+    const EM_ORDER = [['page_view', 'Page views'], ['scroll', 'Scrolls'], ['outbound_click', 'Outbound clicks'], ['site_search', 'Site search'], ['form', 'Form interactions'], ['video', 'Video engagement'], ['file_download', 'File downloads']];
+
+    // create events with their conditions
+    const create = report.templates.filter((t) => isCreateTemplate(t.fn)).map((t) => {
+      const rule = t.params.precompiledRule && typeof t.params.precompiledRule === 'object' ? t.params.precompiledRule : t.params;
+      const name = typeof rule.new_event_name === 'string' ? rule.new_event_name : (typeof t.params.eventName === 'string' ? t.params.eventName : null);
+      if (!name) return null;
+      const conds = conditionTexts([rule.event_name_predicate, rule.conditions]);
+      const copy = rule.merge_source_event_params != null ? !!rule.merge_source_event_params : null;
+      return { title: name, lines: [...conds, ...(copy != null ? [`Copy parameters from the source event: ${copy ? 'Yes' : 'No'}`] : [])] };
+    }).filter(Boolean);
+    const modify = report.templates.filter((t) => isModifyTemplate(t.fn)).map((t) => {
+      const rule = t.params.precompiledRule && typeof t.params.precompiledRule === 'object' ? t.params.precompiledRule : t.params;
+      const conds = conditionTexts([rule.event_name_predicate, rule.conditions]);
+      const names = predicateEventNames(rule.event_name_predicate || rule.conditions || rule);
+      if (!names.length && !conds.length) return null;
+      return { title: names.join(', ') || 'Modify rule', lines: [...conds, ...overrideTexts(rule).map((x) => `Set ${x}`)] };
+    }).filter(Boolean);
+
+    const redact = first('__ccd_auto_redact');
+    const signals = first('__ogt_google_signals');
+    const regscope = first('__ccd_ga_regscope');
+    const onep = first('__ogt_1p_data_v2');
+    const session = first('__ogt_session_timeout');
+    const dma = first('__ogt_dma');
+    const internal = tpl('__ogt_ip_mark');
+    const regionRow = (group) => {
+      const rows = regscope && Array.isArray(regscope.params.settingsTable) ? regscope.params.settingsTable : [];
+      const r = rows.find((x) => x && x.redactFieldGroup === group);
+      if (!r) return null;
+      if (truthy(r.disallowAllRegions)) return { on: false, text: 'Disabled in all regions' };
+      const regions = String(r.disallowedRegions || '').split(',').map((x) => x.trim()).filter(Boolean);
+      return regions.length ? { on: true, text: `Disabled in ${regions.join(', ')}` } : { on: true, text: 'Allowed in all regions' };
+    };
+    const geo = regionRow('DEVICE_AND_GEO');
+    const sigRegion = regionRow('GOOGLE_SIGNALS');
+    const connected = report.destinations.filter((d) => !d.self && d.sources.some((x) => x.sourceType === 'google-tag'));
+    const cookieParams = [];
+    report.templates.forEach((t) => Object.entries(t.params).forEach(([k, v]) => { if (/cookie/i.test(k) && (typeof v !== 'object' || v === null)) cookieParams.push({ label: camelToSnake(k), value: show(v) }); }));
+
+    const sessionLines = [];
+    if (session) {
+      const p = session.params;
+      if (p.sessionHours != null || p.sessionMinutes != null) sessionLines.push({ label: 'Session timeout', value: `${Number(p.sessionHours || 0)}h ${Number(p.sessionMinutes || 0)}m` });
+      Object.entries(p).forEach(([k, v]) => { if (!/^session(Hours|Minutes)$/.test(k) && (typeof v !== 'object' || v === null)) sessionLines.push({ label: camelToSnake(k).replace(/_/g, ' '), value: show(v) }); });
+    }
+
+    const oneLines = [];
+    if (onep) {
+      const P = onep.params;
+      const known = [['isAutoEnabled', 'Collect automatically-detected user-provided data'], ['autoEmailEnabled', 'Email'], ['autoPhoneEnabled', 'Phone'], ['autoAddressEnabled', 'Address'], ['isManualEnabled', 'Manually configured user-provided data']];
+      known.forEach(([k, label]) => { if (P[k] != null) oneLines.push({ label, toggle: truthy(P[k]) }); });
+    }
+
+    const sections = [
+      { title: 'Events', rows: [
+        { key: 'enhanced', icon: 'sparkle', title: 'Enhanced measurement', desc: 'Automatically measure interactions and content on your sites.', toggle: em.length > 0,
+          chipsLabel: em.length ? 'Measuring' : '', chips: EM_ORDER.filter(([k]) => em.some((e) => e.key === k)).map(([, n]) => n),
+          lines: EM_ORDER.map(([k, n]) => { const e = em.find((x) => x.key === k); return { label: n, toggle: !!e, value: e && e.details.length ? e.details.join(' · ') : '' }; }) },
+        { key: 'create', icon: 'plus', title: 'Create custom events', desc: 'Create new events from existing events.', badges: [create.length ? plural(create.length, 'event') : 'No rules'], items: create },
+        { key: 'modify', icon: 'edit', title: 'Modify events', desc: 'Modify incoming events and their parameters.', badges: [modify.length ? plural(modify.length, 'rule') : 'No rules'], items: modify },
+        { key: 'key', icon: 'flag', title: 'Key events', desc: 'Events marked as key events.', badges: [report.events.key.length ? plural(report.events.key.length, 'event') : 'No key events'], items: report.events.key.map((e) => ({ title: e.name })) },
+        redact ? { key: 'redact', icon: 'eraser', title: 'Redact data', desc: 'Prevent specific data from being sent to Google Analytics.',
+          badges: [`Email ${truthy(redact.params.redactEmail) ? 'active' : 'inactive'}`, `URL params ${redact.params.redactQueryParams ? 'active' : 'inactive'}`],
+          lines: [{ label: 'Email', toggle: truthy(redact.params.redactEmail) }, { label: 'Query parameters', toggle: !!redact.params.redactQueryParams, value: redact.params.redactQueryParams ? show(redact.params.redactQueryParams) : '' }] } : null,
+      ].filter(Boolean) },
+      { title: 'Google tag', rows: [
+        { key: 'domains', icon: 'link', title: 'Configure your domains', desc: 'Specify a list of domains for cross-domain measurement.', badges: [report.linker.domains.length ? plural(report.linker.domains.length, 'domain') : 'No domains'], items: report.linker.domains.map((d) => ({ title: d.domain })) },
+        { key: 'internal', icon: 'users', title: 'Define internal traffic', desc: 'Define IP addresses whose traffic should be marked as internal.', badges: [plural(internal.length, 'rule')],
+          items: internal.map((t) => ({ title: `traffic_type = ${show(t.params.paramValue != null ? t.params.paramValue : 'internal')}`, lines: ['IP address conditions are evaluated by Google and are not included in the public tag.'] })) },
+        { key: 'referrals', icon: 'unlink', title: 'List unwanted referrals', desc: 'Specify domains whose traffic should not be considered to be referrals.', badges: [String(report.referralExclusions.length)], items: report.referralExclusions.map((d) => ({ title: d.domain })) },
+        { key: 'session', icon: 'timer', title: 'Adjust session timeout', desc: 'Set how long sessions can last.', badges: session ? [] : ['Not in tag'], lines: sessionLines },
+        { key: 'cookies', icon: 'cookie', title: 'Override cookie settings', desc: 'Change how long cookies last and how they are updated.', badges: cookieParams.length ? [] : ['Not in tag'], lines: cookieParams },
+        onep ? { key: 'updc', icon: 'id', title: 'Allow user-provided data capabilities', desc: 'Configure whether to allow user-provided data in measurement.', toggle: truthy(onep.params.isEnabled) } : null,
+        { key: 'connected', icon: 'plug', title: 'Connected site tags', desc: "Load tags for additional properties using this stream's Google tag.", badges: [`${connected.length} connected`], items: connected.map((d) => ({ title: d.id, lines: [d.type + (d.labels.length ? ` · ${d.labels.join(', ')}` : '')] })) },
+        dma ? { key: 'dma', icon: 'shield', title: 'Manage default consent settings for data collection', desc: 'Default labels for end-user data from the EEA used for advertising purposes.', badges: [show(dma.params.dmaDefault || 'Configured')],
+          lines: Object.entries(dma.params).filter(([, v]) => typeof v !== 'object' || v === null).map(([k, v]) => ({ label: camelToSnake(k).replace(/_/g, ' '), value: show(v) })) } : null,
+      ].filter(Boolean) },
+      { title: 'Data collection', rows: [
+        signals ? { key: 'signals', icon: 'signal', title: 'Google signals', desc: `Advertising features signal: ${show(signals.params.googleSignals || 'Not set')}`, toggle: truthy(signals.params.googleSignals),
+          lines: sigRegion ? [{ label: 'Regions', value: sigRegion.text }] : [] } : null,
+        geo ? { key: 'geo', icon: 'pin', title: 'Granular location and device data collection', desc: geo.text, toggle: geo.on } : null,
+        onep ? { key: 'upd', icon: 'id', title: 'User-provided data collection', desc: 'Sends hashed, consented user-provided data to Analytics for improved measurement and audiences.', toggle: truthy(onep.params.isEnabled), lines: oneLines } : null,
+      ].filter(Boolean) },
+    ].filter((sec) => sec.rows.length);
+
+    const known = new Set([...Object.keys(TEMPLATES)]);
+    const other = [...new Set(report.templates.filter((t) => !known.has(t.fn) && !isCreateTemplate(t.fn) && !isModifyTemplate(t.fn)).map((t) => t.fn))];
+
+    return {
+      stats: [
+        { label: 'Version', value: report.containerVersion ? `v${report.containerVersion}` : '—' },
+        { label: 'Key Events', value: report.events.key.length },
+        { label: 'Create Events', value: create.length },
+        { label: 'Modify Events', value: modify.length },
+        { label: 'Cross-domain', value: report.linker.domains.length },
+        { label: 'Unwanted Referrals', value: report.referralExclusions.length },
+      ],
+      sections,
+      other,
+    };
+  }
+
+  // Finds the GA4 Measurement IDs a website loads: hardcoded gtag.js / gtag('config') plus
+  // IDs configured in its verified GTM containers.
+  async function findIdsOnWebsite(url, fetchText) {
+    const scan = await TSD.scan.runScan({ input: url }, fetchText);
+    if (!scan.site) throw new Error('Enter a website URL such as https://example.com.');
+    const found = [];
+    const add = (id, where) => { const u = id.toUpperCase(); let f = found.find((x) => x.id === u); if (!f) { f = { id: u, where: [] }; found.push(f); } if (!f.where.includes(where)) f.where.push(where); };
+    [...(scan.site.hardcodedGtag || []), ...(scan.site.gtagConfigCalls || [])].filter((id) => /^G-/i.test(id)).forEach((id) => add(id, 'On page'));
+    (scan.containers || []).forEach((c) => (c.summary.ga4Ids || []).forEach((id) => add(id, c.containerId)));
+    return { url: scan.site.url, ids: found, gtmIds: scan.site.gtmIds || [] };
+  }
+
+  TSD.ga4public = { validateId, endpoints, inspect, inspectSource, parsePayload, spyView, findIdsOnWebsite, LIMITATIONS, TEMPLATES };
 })(typeof globalThis !== 'undefined' ? globalThis : window);
