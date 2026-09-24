@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles.css?v=20260924.1">
+  <link rel="stylesheet" href="assets/styles.css?v=20260924.2">
 </head>
 <body>
   <!-- Google Tag Manager (noscript) -->
@@ -42,7 +42,7 @@
       <button type="button" id="backendChip" class="backend-chip" title="How this app fetches gtm.js">
         <span class="dot"></span><span class="label">Checking…</span>
       </button>
-      <button type="button" class="icon-btn" id="pasteBtn" title="Paste gtm.js source" aria-label="Paste gtm.js source"></button>
+      <button type="button" class="icon-btn" id="pasteBtn" title="Paste container code" aria-label="Paste container code"></button>
       <button type="button" class="icon-btn" id="settingsBtn" title="Settings" aria-label="Settings"></button>
     </div>
     <div class="progress" id="progress" hidden><span></span></div>
@@ -68,15 +68,15 @@
 
   <dialog id="pasteDialog" class="dialog">
     <form method="dialog" class="dialog-body" id="pasteForm">
-      <h2>Paste gtm.js source</h2>
-      <p class="muted">In Chrome DevTools, open the Network tab, filter by <code>gtm.js</code>, click the request, open Response, select all, and copy. This works without any proxy.</p>
-      <textarea id="pasteText" spellcheck="false" placeholder="Paste the full gtm.js response here"></textarea>
+      <h2>Paste container code</h2>
+      <p class="muted">Paste a published <code>gtm.js</code> response (open <code>https://www.googletagmanager.com/gtm.js?id=GTM-…</code>, select all, copy), or a container export JSON from GTM Admin → Export container.</p>
+      <textarea id="pasteText" spellcheck="false" placeholder="Paste gtm.js or container export JSON"></textarea>
       <div class="dialog-row">
-        <label class="file-label">Or load a file <input type="file" id="pasteFile" accept=".js,.txt"></label>
+        <label class="file-label">Or load a file <input type="file" id="pasteFile" accept=".js,.txt,.json"></label>
       </div>
       <div class="dialog-actions">
         <button type="button" class="btn-text" data-close>Cancel</button>
-        <button type="submit" class="btn-primary" id="pasteGo">Decode source</button>
+        <button type="submit" class="btn-primary" id="pasteGo">Audit</button>
       </div>
     </form>
   </dialog>
@@ -88,8 +88,9 @@
       <fieldset class="field">
         <legend>Naming style</legend>
         <p class="muted small">GTM doesn't publish real names, so names are built from each item's settings.</p>
+        <label class="radio"><input type="radio" name="style" value="spy"> <span><b>Clean (default)</b><br><span class="muted small">Google Ads Remarketing — AW-123456789, Custom Event — purchase</span></span></label>
         <label class="radio"><input type="radio" name="style" value="readable"> <span><b>Plain English</b><br><span class="muted small">Meta Pixel · Purchase, Page view · URL contains /thank-you</span></span></label>
-        <label class="radio"><input type="radio" name="style" value="emdash"> <span><b>Em-dash (GTM Spy style)</b><br><span class="muted small">Meta Pixel — Purchase, Page View — Page Path contains /thank-you</span></span></label>
+        <label class="radio"><input type="radio" name="style" value="emdash"> <span><b>Em-dash</b><br><span class="muted small">Meta Pixel — Purchase, Page View — Page Path contains /thank-you</span></span></label>
         <label class="radio"><input type="radio" name="style" value="convention"> <span><b>Convention</b><br><span class="muted small">Meta - cHTML - Purchase, PV - Page Path contains /thank-you</span></span></label>
       </fieldset>
 
@@ -132,20 +133,21 @@
     </span>
   </footer>
 
-  <script src="js/config.js?v=20260924.1"></script>
-  <script src="js/core/catalog.js?v=20260924.1"></script>
-  <script src="js/core/parser.js?v=20260924.1"></script>
-  <script src="js/core/naming.js?v=20260924.1"></script>
-  <script src="js/core/decoder.js?v=20260924.1"></script>
-  <script src="js/core/audit.js?v=20260924.1"></script>
-  <script src="js/core/sitescan.js?v=20260924.1"></script>
-  <script src="js/core/snapshots.js?v=20260924.1"></script>
-  <script src="js/core/scan.js?v=20260924.1"></script>
-  <script src="js/core/ga4public.js?v=20260924.1"></script>
-  <script src="js/settings.js?v=20260924.1"></script>
-  <script src="js/net.js?v=20260924.1"></script>
-  <script src="js/icons.js?v=20260924.1"></script>
-  <script src="js/analytics.js?v=20260924.1"></script>
-  <script src="js/app.js?v=20260924.1"></script>
+  <script src="js/config.js?v=20260924.2"></script>
+  <script src="js/core/catalog.js?v=20260924.2"></script>
+  <script src="js/core/parser.js?v=20260924.2"></script>
+  <script src="js/core/naming.js?v=20260924.2"></script>
+  <script src="js/core/decoder.js?v=20260924.2"></script>
+  <script src="js/core/audit.js?v=20260924.2"></script>
+  <script src="js/core/sitescan.js?v=20260924.2"></script>
+  <script src="js/core/snapshots.js?v=20260924.2"></script>
+  <script src="js/core/scan.js?v=20260924.2"></script>
+  <script src="js/core/gtmexport.js?v=20260924.2"></script>
+  <script src="js/core/ga4public.js?v=20260924.2"></script>
+  <script src="js/settings.js?v=20260924.2"></script>
+  <script src="js/net.js?v=20260924.2"></script>
+  <script src="js/icons.js?v=20260924.2"></script>
+  <script src="js/analytics.js?v=20260924.2"></script>
+  <script src="js/app.js?v=20260924.2"></script>
 </body>
 </html>

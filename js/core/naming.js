@@ -279,7 +279,98 @@
       readable,
       convention: detail ? `${kind.short} - ${detail}` : kind.short,
       emdash: emdashify(readable),
+      spy: spyTriggerName(tr, filters, extra),
     };
+  }
+
+  // GTM Spy style: "All Pages", "Pageview — Page URL contains /thank-you",
+  // "Custom Event — purchase", "All Clicks — Click ID contains submit".
+  const SPY_KIND = {
+    'Page View': 'Pageview', 'DOM Ready': 'DOM Ready', 'Window Loaded': 'Window Loaded', 'Initialization': 'Initialization',
+    'Consent Initialization': 'Consent Initialization', 'Click - All Elements': 'All Clicks', 'Click - Just Links': 'Just Links',
+    'Form Submission': 'Form Submission', 'Scroll Depth': 'Scroll Depth', 'Timer': 'Timer', 'History Change': 'History Change',
+    'YouTube Video': 'YouTube Video', 'Element Visibility': 'Element Visibility', 'JavaScript Error': 'JavaScript Error',
+    'Trigger Group': 'Trigger Group', 'Custom Event': 'Custom Event', 'Condition group': 'Condition group',
+  };
+  function spyTriggerName(tr, filters, extra) {
+    const kind = SPY_KIND[tr.kindInfo.long] || tr.kindInfo.long;
+    const parts = [];
+    if (tr.isCustomEvent && tr.eventLabel) parts.push(tr.eventLabel);
+    if (extra) parts.push(extra);
+    parts.push(...filters);
+    if (!parts.length) {
+      if (tr.kindInfo.long === 'Page View') return 'All Pages';
+      if (tr.kindInfo.all && tr.kindInfo.all !== 'All Pages') return tr.kindInfo.all;
+      return kind;
+    }
+    return `${kind} — ${parts.join(' - ')}`;
+  }
+
+  // ---------- GTM Spy style tag names ----------
+  // "Google Ads Remarketing — AW-123", "Google Tag — G-XXXX", "Custom HTML — Microsoft Clarity",
+  // paused tags: "Custom HTML (Paused) - <first firing trigger>".
+  const SPY_TYPE = {
+    __googtag: 'Google Tag', __gaawc: 'GA4 Configuration', __gaawe: 'GA4 Event', __awct: 'Google Ads Conversion',
+    __sp: 'Google Ads Remarketing', __gclidw: 'Conversion Linker', __awud: 'Google Ads User-Provided Data',
+    __awcc: 'Google Ads Calls from Website', __flc: 'Floodlight Counter', __fls: 'Floodlight Sales', __ua: 'Universal Analytics',
+    __bzi: 'LinkedIn Insight', __baut: 'Microsoft Advertising UET', __hjtc: 'Hotjar', __html: 'Custom HTML', __img: 'Custom Image',
+    __twitter_website_tag: 'X (Twitter) Pixel', __crto: 'Criteo OneTag', __asp: 'AdRoll Smart Pixel', __cegg: 'Crazy Egg',
+  };
+  function spyTypeName(fn) {
+    if (SPY_TYPE[fn]) return SPY_TYPE[fn];
+    if (String(fn).startsWith('__cvt')) return 'Custom Template';
+    if (C.LISTENERS[fn]) return `Listener: ${C.LISTENERS[fn]}`;
+    return (C.TAG_TYPES[fn] || {}).name || String(fn).replace(/^_+/, '');
+  }
+
+  function spyTagName(t, ctx, firstTrigger) {
+    const lit = (key) => ctx.lit(t.raw['vtp_' + key]);
+    const disp = (key) => lit(key) || stripBraces(ctx.display(t.paramsObj[key]));
+    const join = (type, detail) => (detail ? `${type} — ${trunc(detail, 60)}` : type);
+    const byTrigger = (type) => (firstTrigger ? `${type} - ${firstTrigger}` : type);
+    if (t.paused) {
+      const orig = '__' + String(lit('originalTagType') || '').replace(/^_+/, '');
+      return byTrigger(`${spyTypeName(orig)} (Paused)`);
+    }
+    const type = spyTypeName(t.fn);
+    switch (t.fn) {
+      case '__googtag': return join(type, disp('tagId'));
+      case '__gaawc': return join(type, disp('measurementId'));
+      case '__gaawe': {
+        const ev = disp('eventName');
+        const id = lit('measurementIdOverride') || lit('measurementId');
+        return join(type, [ev, ctx.multiGa4 && id ? id : ''].filter(Boolean).join(' - '));
+      }
+      case '__awct': return join(type, [disp('conversionId') && ('AW-' + disp('conversionId').replace(/^AW-/i, '')), disp('conversionLabel')].filter(Boolean).join(' - '));
+      case '__sp': case '__awcc': case '__awud': return join(type, disp('conversionId') ? 'AW-' + disp('conversionId').replace(/^AW-/i, '') : '');
+      case '__gclidw': return join(type, disp('linkerDomains') || '');
+      case '__flc': case '__fls': return join(type, [disp('advertiserId') && 'DC-' + disp('advertiserId'), disp('activityTag')].filter(Boolean).join(' - '));
+      case '__ua': return join(type, lit('trackingId') || (Array.isArray(t.raw.vtp_gaSettings) && t.raw.vtp_gaSettings[0] === 'macro' ? ctx.lit(ctx.macroField(t.raw.vtp_gaSettings[1], 'vtp_trackingId')) : ''));
+      case '__bzi': return join(type, disp('id'));
+      case '__baut': return join(type, disp('tagId'));
+      case '__hjtc': return join(type, disp('hotjar_site_id'));
+      case '__html': {
+        const hi = t.htmlInsight || {};
+        const main = (hi.platforms || []).find((p) => p.kind !== 'consent' && p.name !== 'Google tag (gtag.js)') || (hi.platforms || []).find((p) => p.kind === 'consent');
+        if (main) return join(type, main.name);
+        if (hi.sendTo) return join(type, hi.sendTo);
+        if (hi.loads) return join(type, hi.loads);
+        return byTrigger(type);
+      }
+      case '__img': {
+        const u = ctx.display(t.paramsObj.url);
+        const host = (/\/\/([^\/?#{]+)/.exec(u) || [])[1];
+        const p = t.platforms[0];
+        return p ? join(type, p.name) : host ? join(type, host) : byTrigger(type);
+      }
+    }
+    if (String(t.fn).startsWith('__cvt')) {
+      const p = t.platforms.find((x) => x.kind !== 'consent') || t.platforms[0];
+      const key = TEMPLATE_EVENT_KEYS.find((k) => typeof t.raw['vtp_' + k] === 'string' && t.raw['vtp_' + k]);
+      if (p) return join(p.name, key ? t.raw['vtp_' + key] : '');
+      return byTrigger(type);
+    }
+    return byTrigger(type);
   }
 
   // Short text used as "context" for tags that have no descriptive settings of their own
@@ -300,7 +391,7 @@
   }
 
   TSD.naming = {
-    variableName, htmlInsight, tagNames, triggerNames, triggerContext, listenerDetail, dedupe,
+    variableName, htmlInsight, tagNames, triggerNames, spyTagName, spyTypeName, triggerContext, listenerDetail, dedupe,
     setInputResolver: (fn) => { inputResolver = fn; },
     trunc, stripBraces,
   };
