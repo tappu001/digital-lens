@@ -171,6 +171,92 @@ class AddonTests(unittest.TestCase):
         pm.restore()
         self.assertEqual(calls[-1], (False, "R58N123ABC"))
 
+    def test_7_certificate_check(self):
+        sa = self.sa
+        sa.save_saved({})
+        self.state.checks = sa.Checks()
+        code, body = self.post("/api/check-certificate")
+        self.assertTrue(body["ok"])
+        self.assertEqual(self.get("/api/health")["checks"]["cert"]["state"], "running")
+        # Chrome's request to the test page arrives decrypted -> certificate trusted
+        self.addon.request(self.flow("www.google-analytics.com", "/?digital-lens-check=1"))
+        c = self.get("/api/health")["checks"]["cert"]
+        self.assertEqual((c["state"], c["trusted"]), ("ok", True))
+        # a failed check marks it untrusted
+        self.post("/api/check-certificate")
+
+        class Conn:
+            sni = "www.google-analytics.com"
+
+        class Data:
+            conn = Conn()
+        self.addon._blocked_seen.clear()
+        self.addon.tls_failed_client(Data())
+        c = self.get("/api/health")["checks"]["cert"]
+        self.assertEqual((c["state"], c["trusted"]), ("failed", False))
+
+    def test_8_app_check(self):
+        sa = self.sa
+        self.state.checks = sa.Checks()
+        code, body = self.post("/api/check-app?package=com.example.shop")
+        self.assertTrue(body["ok"])
+        self.assertEqual(self.get("/api/health")["checks"]["app"]["state"], "running")
+        self.addon.request(self.flow("www.googleadservices.com", "/pagead/conversion/1/?label=x&bundleid=com.example.shop"))
+        a = self.get("/api/health")["checks"]["app"]
+        self.assertEqual((a["state"], a["package"], a["events"]), ("ok", "com.example.shop", 1))
+        # blocked: only TLS failures on tracking hosts, after the grace period
+        self.post("/api/check-app?package=com.example.shop")
+
+        class Conn:
+            sni = "app-measurement.com"
+
+        class Data:
+            conn = Conn()
+        self.addon._blocked_seen.clear()
+        self.addon.tls_failed_client(Data())
+        self.state.checks.app["started"] -= 11
+        a = self.get("/api/health")["checks"]["app"]
+        self.assertEqual(a["state"], "blocked")
+        self.assertEqual(a["hosts"], ["app-measurement.com"])
+        code, body = self.post("/api/check-app?package=bad%3Bid")
+        self.assertFalse(body["ok"])
+
+    def test_9_testing_toggle_install_cert_shutdown_cors(self):
+        sa = self.sa
+        calls = []
+
+        class FakeAdb(sa.Adb):
+            def set_phone_proxy(self, on, serial=""):
+                calls.append(on)
+                return {"ok": True, "error": ""}
+        self.state.phones = sa.PhoneManager(FakeAdb())
+        self.state.phones.configured = {"R58N123ABC"}
+        self.post("/api/phone-proxy?state=off")
+        self.assertFalse(self.get("/api/health")["testing"])
+        self.assertEqual(calls, [False])
+        self.post("/api/phone-proxy?state=on")
+        self.assertTrue(self.get("/api/health")["testing"])
+        self.state.phones = None
+        # certificate install: copies the mitmproxy CA to the phone (or explains why not)
+        code, body = self.post("/api/install-certificate")
+        if sa.mitm_ca_file():
+            self.assertEqual(body["file"], "Download/DigitalLens-certificate.crt")
+        else:
+            self.assertIn("certificate file was not found", body["error"])
+        # shutdown only works inside mitmproxy
+        called = []
+        self.state.shutdown = lambda: called.append(1)
+        code, body = self.post("/api/shutdown")
+        self.assertTrue(body["ok"])
+        import time
+        time.sleep(0.5)
+        self.assertEqual(called, [1])
+        self.state.shutdown = None
+        # no cross-site access: other websites cannot read the local API
+        req = urllib.request.Request(self.base + "/api/health", headers={"Origin": "https://tappu001.github.io"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            self.assertIsNone(r.headers["Access-Control-Allow-Origin"])
+
     def test_6_no_adb(self):
         s = self.sa.State(adb=self.sa.Adb())
         s.adb.path = None

@@ -14,8 +14,8 @@ SUITE = os.path.join(ROOT, "suite")
 OUT = os.path.join(ROOT, "downloads", "digital-lens-suite.zip")
 PREFIX = "digital-lens-suite/"
 
-SUITE_FILES = ["suite_addon.py", "decoders/__init__.py", "decoders/platforms.py", "requirements.txt", "README.md",
-               "start.sh", "start-windows.bat", "restore-phone.sh", "restore-phone.bat"]
+SUITE_FILES = ["Install Digital Lens.bat", "Uninstall Digital Lens.bat", "run_agent.py", "suite_addon.py", "decoders/__init__.py",
+               "decoders/platforms.py", "requirements.txt", "README.md", "start.sh", "start-windows.bat", "restore-phone.sh", "restore-phone.bat"]
 WEB_FILES = ["index.html", "app.html", "app-inspector.html", "favicon.svg"]
 WEB_DIRS = ["assets", "js"]
 EXECUTABLE = {"start.sh", "restore-phone.sh"}

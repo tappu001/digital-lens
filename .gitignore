@@ -1,3 +1,7 @@
 suite/.venv/
 __pycache__/
 *.pyc
+suite/logs/
+suite/.digital-lens-state.json
+suite/platform-tools/
+suite/Open App Inspector.vbs
