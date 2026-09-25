@@ -18,6 +18,7 @@ if errorlevel 1 goto :nopython
 
 :install
 call ".venv\Scripts\activate.bat"
+echo Installing / checking mitmproxy - first run takes 1 to 5 minutes, no output while downloading...
 python -m pip install -q --disable-pip-version-check --upgrade pip setuptools wheel
 python -m pip install -q --disable-pip-version-check -r requirements.txt
 if errorlevel 1 goto :pipfail
@@ -34,7 +35,7 @@ echo.
 echo   Digital Lens App Inspector is starting: http://127.0.0.1:8088
 echo   Press Ctrl+C to stop - the phone's normal internet is restored.
 echo.
-mitmdump -s suite_addon.py --listen-host 127.0.0.1 --listen-port 8080 --set flow_detail=0
+mitmdump -s suite_addon.py --listen-host 127.0.0.1 --listen-port 8080 --set flow_detail=0 --set termlog_verbosity=warn
 goto :eof
 
 :nopython
