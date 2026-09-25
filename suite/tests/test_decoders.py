@@ -171,6 +171,29 @@ class GoogleAdsTests(unittest.TestCase):
         self.assertEqual(e["params"]["currency"], "INR")
 
 
+class GoogleAdsWebTests(unittest.TestCase):
+    """Seen from Chrome on a real phone (Samsung, Digital Lens App Inspector)."""
+
+    def test_view_through_remarketing(self):
+        ev = decode(Req(host="googleads.g.doubleclick.net", path="/pagead/viewthroughconversion/949204775/", query="random=1&cv=11&fst=1&url=https%3A%2F%2Fexample.com%2F"))
+        self.assertEqual((ev[0]["platform"], ev[0]["type"]), ("Google Ads", "remarketing"))
+        self.assertEqual(ev[0]["params"]["conversion_id"], "AW-949204775")
+        self.assertEqual(ev[0]["params"]["page_location"], "https://example.com/")
+
+    def test_ccm_collect(self):
+        ev = decode(Req(host="ad.doubleclick.net", path="/ccm/s/collect", query="en=page_view&auid=1441478211.1790319600&gtm=45be"))
+        self.assertEqual((ev[0]["platform"], ev[0]["type"]), ("Google Ads", "page_view"))
+        self.assertEqual(ev[0]["params"]["auid"], "1441478211.1790319600")
+
+    def test_web_conversion(self):
+        ev = decode(Req(host="www.googleadservices.com", path="/pagead/conversion/123/", query="label=abc&value=10&currency_code=INR"))
+        self.assertEqual(ev[0]["type"], "conversion")
+
+    def test_ga_page_load_is_not_an_event(self):
+        self.assertEqual(decode(Req(host="google-analytics.com", path="/")), [])
+        self.assertEqual(decode(Req(host="www.google-analytics.com", path="/analytics.js")), [])
+
+
 class TikTokTests(unittest.TestCase):
     def test_batch(self):
         body = {"app": {"id": "7123456789", "package_name": "com.example.shop"}, "batch": [
@@ -248,7 +271,7 @@ class OtherTests(unittest.TestCase):
             Req(method="POST", host="app-measurement.com", path="/a", body=fb_batch([fb_event("add_to_cart", {"currency": "INR", "value": 2499.0})])),
             Req(method="POST", host="graph.facebook.com", path="/v18.0/1/activities", body=urlencode({"custom_events": json.dumps([{"_eventName": "fb_mobile_add_to_cart", "_valueToSum": 2499}])}).encode()),
             Req(method="POST", host="business-api.tiktok.com", path="/open_api/v1.3/app/batch/", body=json.dumps({"batch": [{"event": "AddToCart", "properties": {"value": 2499}}]}).encode()),
-            Req(host="www.googleadservices.com", path="/pagead/conversion/1/", query="label=x&value=2499"),
+            Req(host="www.googleadservices.com", path="/pagead/conversion/1/", query="label=x&value=2499&bundleid=com.example.shop"),
         ]
         got = [(e["platform"], e["type"]) for r in reqs for e in decode(r)]
         self.assertEqual(got, [("Firebase / GA4", "add_to_cart"), ("Meta App Events", "fb_mobile_add_to_cart"), ("TikTok", "AddToCart"), ("Google Ads", "app conversion")])
