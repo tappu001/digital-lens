@@ -47,8 +47,16 @@
   function stop() { S.timers.forEach(clearInterval); S.timers = []; }
   function unmount() { stop(); S.el = null; }
 
-  async function refreshHealth() { try { S.health = await api('/api/health'); renderStatus(); } catch (e) { S.health = null; renderStatus(); } }
+  async function refreshHealth() {
+    try { S.health = await api('/api/health'); } catch (e) { S.health = null; }
+    renderStatus();
+    // The page may open before the phone is plugged in / authorised: load the app list once it is ready.
+    const ready = S.health && (S.health.adb.devices || []).some((d) => d.state === 'device');
+    if (ready && !S.apps.length && !S.loadingApps) loadApps();
+  }
   async function loadApps(all) {
+    if (S.loadingApps) return;
+    S.loadingApps = true;
     S.appsError = '';
     try {
       const r = await api('/api/apps' + (all ? '?all=1' : ''));
@@ -56,6 +64,7 @@
       S.foreground = r.foreground || '';
       if (!r.ok) S.appsError = r.error || 'Could not list apps.';
     } catch (e) { S.appsError = 'Could not reach the Digital Lens suite.'; }
+    S.loadingApps = false;
     renderApps();
   }
   async function poll() {
@@ -141,6 +150,7 @@
     return `<div class="ai-apps-head"><b>Apps on the phone</b><button type="button" class="btn-text" data-ai="reload-apps">Refresh</button></div>
       <input id="aiAppSearch" class="ai-input" placeholder="Search apps" value="${esc(S.appQuery)}">
       ${S.appsError ? `<div class="small warnlink" style="margin:8px 0">${esc(S.appsError)}</div>` : ''}
+      ${S.loadingApps ? '<div class="small muted" style="margin:8px 0">Loading apps…</div>' : ''}
       <div class="ai-app-list">${list.map((a) => `<button type="button" class="ai-app ${a.package === S.selected ? 'sel' : ''}" data-ai-app="${esc(a.package)}"><b>${esc(a.name || a.package.split('.').slice(-1)[0])}</b><span>${esc(a.package)}</span>${a.package === S.foreground ? '<em>on screen</em>' : ''}</button>`).join('') || '<div class="small muted" style="padding:10px 2px">No apps listed yet. Connect a phone with USB debugging on.</div>'}</div>
       <button type="button" class="btn-text small" data-ai="all-apps">Include system apps</button>`;
   }
@@ -169,14 +179,16 @@
     const open = S.open.has(e.id);
     const params = Object.entries(e.params || {});
     const inline = params.slice(0, 4).map(([k, v]) => `<span>${esc(k)}=<b>${esc(String(v).slice(0, 40))}</b></span>`).join('<i>·</i>');
-    const app = e.app || (e.foreground ? `${e.foreground} (on screen)` : '');
+    // e.app comes from the request itself. The on-screen app is only what was open at that moment:
+    // background apps send tracking too, so it is labelled as such rather than as the sender.
+    const app = e.app ? e.app : (e.foreground ? `Not identified — ${e.foreground} was on screen at that moment (the request may come from another app in the background)` : 'Not identified');
     return `<div class="ai-row ${open ? 'open' : ''} ${e.platform === 'Connection blocked' ? 'blocked' : ''}">
       <button type="button" class="ai-line" data-ai-row="${e.id}">
         <span class="t">${esc(e.time)}</span>${chip(e.platform)}<span class="ev">${esc(e.type)}</span><span class="pv">${inline}${params.length > 4 ? `<i>·</i><span class="more">+${params.length - 4}</span>` : ''}</span><span class="ar">${open ? '▾' : '▸'}</span>
       </button>
       ${open ? `<div class="ai-detail">
         ${e.note ? `<div class="ai-dnote">${esc(e.note)}</div>` : ''}
-        <div class="ai-meta"><span><b>App</b> ${esc(app || 'not identified')}</span><span><b>Request</b> ${esc(e.method || '')} <code>${esc(e.url || '')}</code></span></div>
+        <div class="ai-meta"><span><b>App</b> ${esc(app)}</span><span><b>Request</b> ${esc(e.method || '')} <code>${esc(e.url || '')}</code></span></div>
         ${params.length ? `<table class="ai-ptable"><tbody>${params.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')}</tbody></table>` : ''}
       </div>` : ''}
     </div>`;
