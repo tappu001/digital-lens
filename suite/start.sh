@@ -31,9 +31,8 @@ else
 fi
 
 export DL_MANAGE_PHONE=1
-( sleep 4; (command -v open >/dev/null && open http://127.0.0.1:8088) || (command -v xdg-open >/dev/null && xdg-open http://127.0.0.1:8088) || true ) >/dev/null 2>&1 &
 echo
 echo "  Digital Lens App Inspector is starting: http://127.0.0.1:8088"
 echo "  Press Ctrl+C to stop (the phone's normal internet is restored)."
 echo
-mitmdump -s suite_addon.py --listen-host 127.0.0.1 --listen-port 8080 --set flow_detail=0 --set termlog_verbosity=warn
+python run_agent.py --open

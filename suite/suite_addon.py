@@ -127,7 +127,7 @@ class Adb:
 
     @staticmethod
     def _sdk_path() -> Optional[str]:
-        for base in (os.environ.get("ANDROID_HOME"), os.environ.get("ANDROID_SDK_ROOT"),
+        for base in (HERE, os.environ.get("ANDROID_HOME"), os.environ.get("ANDROID_SDK_ROOT"),
                      os.path.expanduser("~/Library/Android/sdk"), os.path.expanduser("~/Android/Sdk"),
                      os.path.join(os.environ.get("LOCALAPPDATA", ""), "Android", "Sdk")):
             if base:
@@ -181,10 +181,36 @@ class Adb:
         if on:
             r1 = self.run("reverse", f"tcp:{PROXY_PORT}", f"tcp:{PROXY_PORT}", serial=serial)
             r2 = self.run("shell", "settings", "put", "global", "http_proxy", f"127.0.0.1:{PROXY_PORT}", serial=serial)
+            if r1["ok"] and r2["ok"]:
+                self.install_guard(serial)
             return {"ok": r1["ok"] and r2["ok"], "error": r1["error"] or r2["error"]}
         r = self.run("shell", "settings", "put", "global", "http_proxy", ":0", serial=serial)
         self.run("reverse", "--remove", f"tcp:{PROXY_PORT}", serial=serial)
         return {"ok": r["ok"], "error": r["error"]}
+
+    def install_guard(self, serial: str = "") -> None:
+        """Best-effort safety net on the phone: if the USB cable is unplugged while the phone still
+        points at the proxy, remove the proxy so the phone does not lose internet. Runs as a small
+        shell loop on the phone and exits as soon as the proxy is removed or the cable is unplugged.
+        Does nothing on phones that do not expose their USB state."""
+        port = PROXY_PORT
+        # Plain double quotes only: the whole loop is wrapped in single quotes for `sh -c`.
+        script = (
+            "while true; do "
+            f'[ "$(settings get global http_proxy)" = "127.0.0.1:{port}" ] || exit 0; '
+            'st="$(cat /sys/class/udc/*/state 2>/dev/null; cat /sys/class/android_usb/android0/state 2>/dev/null)"; '
+            'case "$st" in *onfigured*|*CONFIGURED*) sleep 3 ;; "") exit 0 ;; '
+            "*) settings put global http_proxy :0; exit 0 ;; esac; done"
+        )
+        self.run("shell", f"(setsid sh -c '{script}' >/dev/null 2>&1 < /dev/null &)", serial=serial, timeout=5)
+
+    def open_url(self, url: str) -> Dict[str, Any]:
+        return self.run("shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", url)
+
+    def force_stop(self, package: str) -> Dict[str, Any]:
+        if not re.fullmatch(r"[A-Za-z0-9._]+", package or ""):
+            return {"ok": False, "error": "Invalid package name."}
+        return self.run("shell", "am", "force-stop", package)
 
     def phone_proxy(self) -> str:
         r = self.run("shell", "settings", "get", "global", "http_proxy", timeout=4)
@@ -209,9 +235,23 @@ class PhoneManager:
         self.adb = adb
         self.interval = interval
         self.configured: set = set()
+        self.paused = False
         self._stop = threading.Event()
 
+    def pause(self) -> None:
+        """'Stop testing': the phone goes back to normal internet until 'Start testing'."""
+        self.paused = True
+        for serial in list(self.configured):
+            self.adb.set_phone_proxy(False, serial=serial)
+        self.configured.clear()
+
+    def resume(self) -> None:
+        self.paused = False
+        self.tick()
+
     def tick(self) -> None:
+        if self.paused:
+            return
         ready = {d["serial"] for d in self.adb.devices() if d.get("state") == "device"}
         for serial in ready - self.configured:
             if self.adb.set_phone_proxy(True, serial=serial)["ok"]:
@@ -235,6 +275,102 @@ class PhoneManager:
             self.adb.set_phone_proxy(False, serial=serial)
             print(f"  Phone {serial}: proxy removed, normal internet restored.", flush=True)
         self.configured.clear()
+
+
+# ---------------------------------------------------------------------------
+# One-click checks: is the certificate trusted? does this app's tracking go through?
+# ---------------------------------------------------------------------------
+STATE_FILE = os.path.join(HERE, ".digital-lens-state.json")
+CERT_TEST_HOST = "www.google-analytics.com"
+
+
+def load_saved() -> Dict[str, Any]:
+    try:
+        with open(STATE_FILE) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def save_saved(data: Dict[str, Any]) -> None:
+    try:
+        with open(STATE_FILE, "w") as f:
+            json.dump(data, f)
+    except OSError:
+        pass
+
+
+class Checks:
+    CERT_TIMEOUT = 25
+    APP_TIMEOUT = 30
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.saved = load_saved()
+        self.cert = {"state": "idle", "started": 0.0}
+        self.app = {"state": "idle", "started": 0.0, "package": "", "events": 0, "blocked": 0, "hosts": []}
+
+    # signals from the proxy ----------------------------------------------
+    def https_ok(self, host: str) -> None:
+        with self.lock:
+            if host.endswith("google-analytics.com") and self.cert["state"] == "running":
+                self.cert["state"] = "ok"
+            if not self.saved.get("cert_ok"):
+                self.saved["cert_ok"] = True
+                save_saved(self.saved)
+
+    def tls_failed(self, host: str, tracking: bool) -> None:
+        with self.lock:
+            if host.endswith("google-analytics.com") and self.cert["state"] == "running":
+                self.cert["state"] = "failed"
+                self.saved["cert_ok"] = False
+                save_saved(self.saved)
+            if tracking and self.app["state"] == "running":
+                self.app["blocked"] += 1
+                if host not in self.app["hosts"]:
+                    self.app["hosts"].append(host)
+
+    def event(self, platform: str) -> None:
+        with self.lock:
+            if self.app["state"] == "running" and platform not in ("Unknown", "Connection blocked"):
+                self.app["events"] += 1
+
+    # checks ----------------------------------------------------------------
+    def start_cert(self) -> None:
+        with self.lock:
+            self.cert = {"state": "running", "started": time.time()}
+
+    def start_app(self, package: str) -> None:
+        with self.lock:
+            self.app = {"state": "running", "started": time.time(), "package": package, "events": 0, "blocked": 0, "hosts": []}
+
+    def status(self) -> Dict[str, Any]:
+        with self.lock:
+            now = time.time()
+            if self.cert["state"] == "running" and now - self.cert["started"] > self.CERT_TIMEOUT:
+                self.cert["state"] = "no_traffic"
+            a = self.app
+            if a["state"] == "running":
+                age = now - a["started"]
+                if a["events"]:
+                    a["state"] = "ok"
+                elif a["blocked"] and age > 10:
+                    a["state"] = "blocked"
+                elif age > self.APP_TIMEOUT:
+                    a["state"] = "no_traffic"
+            cert_saved = self.saved.get("cert_ok")
+            return {"cert": {"state": self.cert["state"], "trusted": cert_saved},
+                    "app": {k: a[k] for k in ("state", "package", "events", "blocked", "hosts")}}
+
+
+def mitm_ca_file() -> Optional[str]:
+    try:
+        from mitmproxy import ctx
+        confdir = os.path.expanduser(ctx.options.confdir)
+    except Exception:
+        confdir = os.path.expanduser("~/.mitmproxy")
+    p = os.path.join(confdir, "mitmproxy-ca-cert.cer")
+    return p if os.path.isfile(p) else None
 
 
 # ---------------------------------------------------------------------------
@@ -279,6 +415,9 @@ class State:
     def __init__(self, adb: Optional[Adb] = None, buffer: Optional[EventBuffer] = None):
         self.adb = adb or Adb()
         self.buffer = buffer or EventBuffer()
+        self.checks = Checks()
+        self.phones: Optional[PhoneManager] = None
+        self.shutdown = None  # set by the addon: stops the proxy
         self.started_at = now_ms()
 
 
@@ -338,7 +477,8 @@ def make_handler(state: State, web_root: str):
                 return self._json({"ok": True, "app": "digital-lens-suite", "version": VERSION, "proxy_port": PROXY_PORT,
                                    "adb": {"available": adb.available, "devices": devices,
                                            "phone_proxy": adb.phone_proxy() if ready else ""},
-                                   **s.stats()})
+                                   "testing": not (state.phones and state.phones.paused), "managed": bool(state.phones),
+                                   "checks": state.checks.status(), **s.stats()})
             if path == "/api/events":
                 try:
                     since = int(a.get("since", "0") or 0)
@@ -357,7 +497,37 @@ def make_handler(state: State, web_root: str):
             if method == "POST" and path == "/api/launch":
                 return self._json(adb.launch(a.get("package", "")))
             if method == "POST" and path == "/api/phone-proxy":
-                return self._json(adb.set_phone_proxy(a.get("state") == "on"))
+                on = a.get("state") == "on"
+                if state.phones:
+                    state.phones.resume() if on else state.phones.pause()
+                    return self._json({"ok": True})
+                return self._json(adb.set_phone_proxy(on))
+            if method == "POST" and path == "/api/check-certificate":
+                state.checks.start_cert()
+                r = adb.open_url(f"https://{CERT_TEST_HOST}/?digital-lens-check={int(time.time())}")
+                return self._json({"ok": r["ok"], "error": r["error"]})
+            if method == "POST" and path == "/api/check-app":
+                pkg = a.get("package", "")
+                stop = adb.force_stop(pkg)
+                if not stop["ok"]:
+                    return self._json(stop)
+                s.clear()
+                state.checks.start_app(pkg)
+                return self._json(adb.launch(pkg))
+            if method == "POST" and path == "/api/install-certificate":
+                ca = mitm_ca_file()
+                if not ca:
+                    return self._json({"ok": False, "error": "The certificate file was not found. Restart Digital Lens and try again."})
+                r = adb.run("push", ca, "/sdcard/Download/DigitalLens-certificate.crt", timeout=15)
+                if not r["ok"]:
+                    return self._json({"ok": False, "error": r["error"] or "Could not copy the certificate to the phone."})
+                adb.run("shell", "am", "start", "-a", "android.settings.SECURITY_SETTINGS")
+                return self._json({"ok": True, "file": "Download/DigitalLens-certificate.crt"})
+            if method == "POST" and path == "/api/shutdown":
+                if state.shutdown:
+                    threading.Timer(0.3, state.shutdown).start()
+                    return self._json({"ok": True})
+                return self._json({"ok": False, "error": "Not running inside the proxy."})
             if method == "GET" and path in ("/api/clear", "/api/launch", "/api/phone-proxy"):
                 return self._json({"ok": False, "error": "Use POST."}, 405)
             return self._json({"ok": False, "error": "Not found"}, 404)
@@ -412,9 +582,22 @@ class DigitalLensAddon:
                 self.httpd = start_server(self.state)
                 print(f"\n  Digital Lens App Inspector: http://{UI_HOST}:{UI_PORT}\n  Proxy listening on port {PROXY_PORT}.\n", flush=True)
             except OSError as exc:
-                print(f"  Could not start the web UI on port {UI_PORT}: {exc}", flush=True)
+                # Another Digital Lens is already running: stop this one instead of fighting over the phone.
+                print(f"  Could not start the web UI on port {UI_PORT}: {exc}. Another Digital Lens is probably running; exiting.", flush=True)
+                try:
+                    from mitmproxy import ctx
+                    ctx.master.shutdown()
+                except Exception:
+                    pass
+                return
+        try:
+            from mitmproxy import ctx
+            self.state.shutdown = ctx.master.shutdown
+        except Exception:
+            pass
         if os.environ.get("DL_MANAGE_PHONE") == "1" and self.state.adb.available and not self.phones:
             self.phones = PhoneManager(self.state.adb)
+            self.state.phones = self.phones
             self.phones.start()
         elif os.environ.get("DL_MANAGE_PHONE") == "1" and not self.state.adb.available:
             print("  adb was not found, so the phone cannot be connected automatically. Install Android platform-tools.", flush=True)
@@ -431,6 +614,8 @@ class DigitalLensAddon:
         if host in ("mitm.it",):
             return
         self.state.buffer.note_request()
+        if flow.request.scheme == "https":
+            self.state.checks.https_ok(host)
         req = flow_to_req(flow)
         try:
             events = decode(req)
@@ -443,6 +628,7 @@ class DigitalLensAddon:
             e = dict(e)
             e.update({"method": req.method, "host": req.host, "path": req.path, "url": req.url[:2000], "foreground": fg})
             self.state.buffer.add(e)
+            self.state.checks.event(e.get("platform", ""))
 
     def tls_failed_client(self, data):
         """The app rejected our certificate (not trusted, or pinned)."""
@@ -451,6 +637,7 @@ class DigitalLensAddon:
         except Exception:
             host = ""
         host = host or "unknown host"
+        self.state.checks.tls_failed(host, is_tracking_host(host))
         last = self._blocked_seen.get(host, 0)
         if time.time() - last < 30:
             return

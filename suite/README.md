@@ -10,41 +10,41 @@ Built by **Tapasvi Dudhrejiya** · dudhrejiyatapasvi@gmail.com
 
 ## What you need
 
-- A laptop with **Python 3.10+** ([python.org](https://www.python.org/downloads/). On Windows, tick *Add python.exe to PATH*)
-- **Android platform-tools** (`adb`): [developer.android.com/tools/releases/platform-tools](https://developer.android.com/tools/releases/platform-tools). Unzip it and add the folder to PATH, or install Android Studio
+- A Windows laptop (macOS / Linux also work with `./start.sh`). The installer adds Python and Android's adb if they are missing.
 - An Android phone and a USB **data** cable
 
-## Start
+## Install (once)
 
-| Windows | macOS / Linux |
-| --- | --- |
-| Double-click `start-windows.bat` | Run `./start.sh` in a terminal |
+1. Unzip the download.
+2. Double-click **Install Digital Lens.bat**. It takes 2–5 minutes and installs:
+   - Python (via winget, only if missing)
+   - the Digital Lens engine (mitmproxy)
+   - Android's adb (downloaded from Google, only if missing)
 
-The first run installs mitmproxy into a local `.venv` folder (about a minute). The launcher
-then starts the proxy and opens **http://127.0.0.1:8088** → *App Inspector*.
+   It then puts a **Digital Lens App Inspector** icon on your desktop.
 
-Press **Ctrl+C** in the launcher window to stop. The phone's normal internet is restored
-automatically.
+Nothing starts with Windows: Digital Lens only runs when you open it from the icon.
+On macOS / Linux, run `./start.sh` instead.
 
-## One-time phone setup
+## Every time you test
 
-1. **USB debugging:** Settings → About phone → tap **Build number** 7 times → back to Settings →
-   Developer options → **USB debugging** on.
-2. **Plug in** the cable and tap **Allow** on the phone. Digital Lens tunnels the phone's traffic
-   through the cable (`adb reverse`) and sets the phone's proxy to it. You don't need Wi-Fi settings or an IP address.
-3. **Install the certificate:** with the launcher running, open Chrome on the phone at
-   **http://mitm.it** → *Android* → download. Then Settings → Security → *Encryption & credentials*
-   → *Install a certificate* → **CA certificate** → choose the downloaded file.
+1. Double-click the **Digital Lens App Inspector** desktop icon. The browser opens App Inspector.
+   No black window, no commands.
+2. Plug in the phone and tap **Allow** on it. The checklist at the top turns green by itself:
+   **Phone connected → Certificate → Live — capturing**.
+3. First time with this phone only: click **Install certificate**. The certificate is copied to the phone
+   and Settings opens. Follow the 3 steps shown, then click **Check certificate** (✓ Certificate trusted).
+4. Pick your app on the left and click **Check this app**. It restarts the app and tells you:
+   - **✓ Tracking is readable**: use the app and watch the events.
+   - **✗ This build refuses the certificate**: click **Copy message for developer** and ask for a debug build.
+5. When you're done, click **Stop testing** (the phone goes back to its normal internet), then unplug.
 
-## Use
+To close Digital Lens completely: *Setup steps and troubleshooting → Close Digital Lens*.
+To remove it: **Uninstall Digital Lens.bat**, then delete the folder.
 
-1. In App Inspector, pick the app from **Apps on the phone**.
-2. Tap **Open on phone** (or open it yourself).
-3. Use the app. Every tracking request appears within about a second: time, platform, event name
-   and the main parameters. Click a row for the full request URL and every parameter.
-
-Filters: app, platform chips, text search (event names and parameter values), Following /
-Paused, Clear, and Export JSON.
+**Safety:** if you unplug without clicking *Stop testing*, Digital Lens tries to restore the phone's
+internet automatically (on phones that report the USB state). If a phone ever has no internet
+afterwards, plug it back in and click **Stop testing**, or run `restore-phone.bat`.
 
 ## Important limitation: which apps can be read
 
@@ -94,7 +94,10 @@ listens on 127.0.0.1 only.
 ## Files
 
 ```
-start-windows.bat / start.sh     launchers
+Install Digital Lens.bat         one-time installer (desktop icon)
+Uninstall Digital Lens.bat       removes the desktop icon
+run_agent.py                     the background helper
+start-windows.bat / start.sh     run with a visible window (troubleshooting / macOS / Linux)
 restore-phone.bat / .sh          remove the phone proxy manually
 suite_addon.py                   mitmproxy addon + local web server and API
 decoders/platforms.py            platform decoders

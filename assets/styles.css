@@ -716,3 +716,26 @@ body { background: #f6f7f9; color: var(--ink); }
   .ai-line .pv { grid-column: 1 / -1; }
   .ai-detail { padding-left: 14px; }
 }
+/* App Inspector: setup checklist + one-click checks */
+.ai-checklist { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+.ai-step { display: flex; gap: 10px; align-items: flex-start; background: #fff; border: 1px solid var(--line3); border-radius: 12px; padding: 12px 14px; }
+.ai-step .si { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 13px; background: #eef0f4; color: #6b7280; }
+.ai-step.ok { border-color: #bbf7d0; background: #f6fef9; } .ai-step.ok .si { background: #22c55e; color: #fff; }
+.ai-step.wait { border-color: #fde68a; background: #fffcf2; } .ai-step.wait .si { background: #f59e0b; color: #fff; animation: ai-blink 1.2s infinite; }
+.ai-step.bad { border-color: #fecaca; background: #fff7f7; } .ai-step.bad .si { background: #ef4444; color: #fff; }
+.ai-step.q .si { background: var(--accent-tint); color: var(--accent); }
+.ai-step > div > b { display: block; font-size: 13.5px; }
+.ai-step span b { color: var(--ink); }
+.ai-step span { font-size: 12.5px; color: var(--muted); }
+.ai-step .sa, .ai-select-hint .sa, .ai-result .sa { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.ai-select-hint .sa { margin-top: 0; }
+.btn-primary.sm, .btn-outline.sm { height: 30px; padding: 0 12px; font-size: 12.5px; }
+@keyframes ai-blink { 50% { opacity: .55; } }
+.ai-result { border-radius: 12px; padding: 11px 14px; font-size: 13px; margin: -2px 0 10px; border: 1px solid; }
+.ai-result.ok { background: #f0fdf4; border-color: #bbf7d0; color: #14532d; }
+.ai-result.bad { background: #fef2f2; border-color: #fecaca; color: #7f1d1d; }
+.ai-result.wait { background: #fffbeb; border-color: #fde68a; color: #78350f; }
+.ai-result.q { background: #f8fafc; border-color: var(--line3); color: var(--ink); }
+.ai-note.ok { background: #f0fdf4; border-color: #bbf7d0; }
+.ai-mini { margin: 8px 0 4px 18px; padding: 0; font-size: 12.5px; line-height: 1.6; }
+@media (max-width: 900px) { .ai-checklist { grid-template-columns: 1fr; } }
