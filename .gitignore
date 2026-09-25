@@ -1,0 +1,3 @@
+suite/.venv/
+__pycache__/
+*.pyc

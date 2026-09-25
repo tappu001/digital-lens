@@ -18,3 +18,19 @@ jobs:
           node-version: 20
       - name: Run regression tests
         run: npm test
+
+  app-inspector:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install mitmproxy
+        run: python -m pip install --upgrade pip setuptools wheel && python -m pip install -r suite/requirements.txt
+      - name: Decoder and proxy addon tests
+        run: python -m unittest discover -s suite/tests -v
+      - name: Downloadable suite ZIP is up to date
+        run: python suite/build_zip.py --check
