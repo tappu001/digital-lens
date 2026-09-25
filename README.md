@@ -51,9 +51,31 @@ A summary row shows the CMS / ecommerce platform, GTM containers with load time,
 
 Tools injected only after the page runs JavaScript (or by Shopify customer events) are not in the HTML and cannot be seen by a static scan.
 
+### 4. App Inspector (Android)
+
+GTM Preview, for mobile apps. Connect an Android phone over USB, open an app, and watch every
+analytics and advertising event it sends, live: **Firebase / GA4, GA4 Measurement Protocol, Meta
+App Events, Google Ads, TikTok, Snapchat, AppsFlyer and Adjust**, each with its platform, event name
+and all parameters. Other tracking-like hosts appear as *Unknown tracking request*.
+
+A web page can't read a phone's traffic, so App Inspector runs from the **Digital Lens suite**, a
+download (`downloads/digital-lens-suite.zip`) with a small mitmproxy addon, launchers for Windows,
+macOS and Linux, and this same web app served on `http://127.0.0.1:8088`. The phone reaches the proxy
+over the USB cable (`adb reverse`). The suite points the phone at it when it is plugged in and restores
+it on exit. Only analytics and ad hosts are decrypted; everything else passes through untouched.
+
+**Limitation:** since Android 7, apps only trust the proxy's certificate if their developers allow user
+certificates. Chrome and debug/QA builds work; most Play Store builds refuse the connection, which is
+shown as *Connection blocked* rather than hidden. Setup, troubleshooting and platform details:
+[`suite/README.md`](suite/README.md).
+
+Source: `suite/` (decoders in `suite/decoders/platforms.py`, addon and local API in
+`suite/suite_addon.py`, tests in `suite/tests/`). After changing the suite or web files, rebuild the
+download with `python suite/build_zip.py`. CI fails if the ZIP is out of date.
+
 ### Navigation
 
-Every workspace has its own address, so browser back/forward, refresh and shared links work: `app.html#gtm?q=GTM-XXXX&view=triggers`, `app.html#ga4?id=G-XXXX`, `app.html#website?url=https://example.com`. The landing page links straight to each workspace.
+Every workspace has its own address, so browser back/forward, refresh and shared links work: `app.html#gtm?q=GTM-XXXX&view=triggers`, `app.html#ga4?id=G-XXXX`, `app.html#website?url=https://example.com`, `app.html#app`. The landing page links straight to each workspace.
 
 ---
 
