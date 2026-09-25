@@ -518,23 +518,36 @@ def decode_meta(req: Req) -> List[Dict[str, Any]]:
 # Google Ads app conversions
 # ---------------------------------------------------------------------------
 def decode_google_ads(req: Req) -> List[Dict[str, Any]]:
-    if not host_matches(req.host, "googleadservices.com", "googleads.g.doubleclick.net", "googlesyndication.com"):
+    """App conversions, web conversions, remarketing (view-through) and Google tag ccm collect."""
+    if not host_matches(req.host, "googleadservices.com", "googleads.g.doubleclick.net", "googlesyndication.com", "ad.doubleclick.net"):
         return []
-    if "/pagead/conversion" not in req.path and "/pagead/1p-conversion" not in req.path:
+    path = req.path
+    conv = re.search(r"/pagead/(?:1p-)?conversion/(\d+)", path)
+    vtc = re.search(r"/pagead/viewthroughconversion/(\d+)", path)
+    ccm = re.search(r"/ccm/(?:s/)?collect", path)
+    if not (conv or vtc or ccm):
         return []
     f = form_fields(req)
-    m = re.search(r"/pagead/(?:1p-)?conversion/(\d+)", req.path)
     params: Dict[str, Any] = {}
+    m = conv or vtc
     if m:
         params["conversion_id"] = "AW-" + m.group(1)
     rename = {"label": "conversion_label", "value": "value", "currency_code": "currency", "bundleid": "bundle_id", "appversion": "app_version",
               "osversion": "os_version", "rdid": "advertising_id", "lat": "limit_ad_tracking", "timestamp": "timestamp", "usage_tracking_id": "usage_tracking_id",
-              "ev": "event", "data": "data", "gclid": "gclid", "gbraid": "gbraid", "remarketing_only": "remarketing_only"}
+              "ev": "event", "data": "data", "gclid": "gclid", "gbraid": "gbraid", "wbraid": "wbraid", "remarketing_only": "remarketing_only",
+              "url": "page_location", "ref": "page_referrer", "tiba": "page_title", "en": "event", "oid": "transaction_id", "gtm": "gtm_hash"}
     for k, v in f.items():
         params[rename.get(k, k)] = v
     app = f.get("bundleid", "")
-    return [event(PLATFORM_GADS, "app conversion", params, app=app,
-                  note="Many Google Ads app conversions are measured through Firebase instead, so they appear as Firebase events.")]
+    if ccm:
+        return [event(PLATFORM_GADS, f.get("en") or "ccm collect", params, app=app,
+                      note="Google tag conversion measurement request (Google Ads / Floodlight).")]
+    if vtc:
+        return [event(PLATFORM_GADS, "remarketing", params, app=app, note="Google Ads remarketing / view-through conversion ping.")]
+    if app or "/app" in path:
+        return [event(PLATFORM_GADS, "app conversion", params, app=app,
+                      note="Many Google Ads app conversions are measured through Firebase instead, so they appear as Firebase events.")]
+    return [event(PLATFORM_GADS, "conversion", params, app=app)]
 
 
 # ---------------------------------------------------------------------------
@@ -726,6 +739,7 @@ def decode(req: Req) -> List[Dict[str, Any]]:
             out.extend(d(req))
         except Exception as exc:  # a malformed payload must never break the stream
             out.append(event(PLATFORM_UNKNOWN, "decode error", {"host": req.host, "path": req.path}, note=f"{d.__name__}: {exc}"))
-    if not out:
+    # Plain page / script loads on Google Analytics hosts (not /collect hits) are not events.
+    if not out and not host_matches(req.host, "google-analytics.com", "analytics.google.com"):
         out.extend(decode_unknown(req))
     return out
