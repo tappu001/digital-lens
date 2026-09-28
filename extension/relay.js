@@ -32,6 +32,7 @@
     if (m.__dlApp === 'ping') reply({ type: 'hello', status: await send({ type: 'status' }) });
     if (m.__dlApp === 'start') reply({ type: 'started', result: await send({ type: 'start', url: m.url, returnUrl: location.origin + location.pathname }) });
     if (m.__dlApp === 'get') reply({ type: 'recording', recording: await send({ type: 'get' }) });
+    if (m.__dlApp === 'history') reply({ type: 'history', recordings: await send({ type: 'history' }) });
     if (m.__dlApp === 'stop') reply({ type: 'stopped', result: await send({ type: 'stop', open: false }) });
   });
 })();

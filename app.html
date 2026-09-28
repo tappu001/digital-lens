@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles.css?v=20260928.3">
+  <link rel="stylesheet" href="assets/styles.css?v=20260928.7">
   <link rel="stylesheet" href="assets/site.css?v=20260928.2">
 </head>
 <body>
@@ -107,6 +107,12 @@
       </fieldset>
 
       <fieldset class="field">
+        <legend>Google Sheets export</legend>
+        <p class="muted small">Ecommerce Audit can create the report directly as a Google Sheet in your Google Drive. It needs a Google OAuth Client ID (one-time setup, see DEPLOY.md). Digital Lens only asks for access to the files it creates.</p>
+        <input type="text" id="googleClientId" placeholder="1234567890-abc123.apps.googleusercontent.com" spellcheck="false" style="width:100%">
+      </fieldset>
+
+      <fieldset class="field">
         <legend>Display</legend>
         <label class="check"><input type="checkbox" id="showListeners"> Show GTM listener tags and listener-only triggers</label>
       </fieldset>
@@ -132,7 +138,7 @@
     <div class="fl"><a href="mailto:dudhrejiyatapasvi@gmail.com">dudhrejiyatapasvi@gmail.com</a><a href="https://www.linkedin.com/in/tapasvi-dudhrejiya/" target="_blank" rel="noopener">LinkedIn ↗</a></div>
   </footer></div>
 
-  <script src="js/config.js?v=20260925.1"></script>
+  <script src="js/config.js?v=20260928.7"></script>
   <script src="js/core/catalog.js?v=20260925.1"></script>
   <script src="js/core/parser.js?v=20260925.1"></script>
   <script src="js/core/naming.js?v=20260925.1"></script>
@@ -145,15 +151,17 @@
   <script src="js/core/gtmexport.js?v=20260925.1"></script>
   <script src="js/core/inventory.js?v=20260928.3"></script>
   <script src="js/core/ga4public.js?v=20260925.1"></script>
-  <script src="js/core/ecomspec.js?v=20260928.4"></script>
-  <script src="js/core/xlsx.js?v=20260928.5"></script>
-  <script src="js/settings.js?v=20260925.1"></script>
+  <script src="js/core/ecomspec.js?v=20260928.7"></script>
+  <script src="js/core/xlsx.js?v=20260928.7"></script>
+  <script src="js/settings.js?v=20260928.7"></script>
   <script src="js/net.js?v=20260925.1"></script>
   <script src="js/icons.js?v=20260925.1"></script>
   <script src="js/analytics.js?v=20260925.1"></script>
   <script src="js/appinspector.js?v=20260928.1"></script>
-  <script src="js/ecomaudit.js?v=20260928.6"></script>
+  <script src="js/ecomhistory.js?v=20260928.7"></script>
+  <script src="js/gdrive.js?v=20260928.7"></script>
+  <script src="js/ecomaudit.js?v=20260928.7"></script>
   <script src="js/header.js?v=20260928.2"></script>
-  <script src="js/app.js?v=20260928.3"></script>
+  <script src="js/app.js?v=20260928.7"></script>
 </body>
 </html>

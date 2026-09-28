@@ -4,6 +4,7 @@
 const LIVE = 'https://tappu001.github.io/digital-lens/app.html';
 const MAX_PUSHES = 4000;
 const MAX_HITS = 2000;
+const MAX_HISTORY = 50;
 
 let queue = Promise.resolve();
 const locked = (fn) => (queue = queue.then(fn, fn));
@@ -34,7 +35,9 @@ async function stop(open) {
   if (!rec) return { ok: false };
   const last = { app: 'digital-lens-recorder', version: chrome.runtime.getManifest().version, id: rec.id, site: rec.site, startedAt: rec.startedAt, endedAt: new Date().toISOString(), pages: rec.pages.filter((p) => p.pushes.length || p.url), hits: rec.hits };
   await chrome.storage.local.remove('rec');
-  await set({ last });
+  // Keep the last recordings too, so Digital Lens can list and reopen earlier audits.
+  const { history = [] } = await get('history');
+  await set({ last, history: [last, ...history.filter((h) => h.id !== last.id)].slice(0, MAX_HISTORY) });
   badge(null);
   if (open) await chrome.tabs.create({ url: `${returnUrl || LIVE}#ecom?recording=${rec.id}` });
   return { ok: true, id: rec.id };
@@ -70,6 +73,7 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       case 'stop': return reply(await stop(msg.open !== false));
       case 'cancel': await chrome.storage.local.remove('rec'); badge(null); return reply({ ok: true });
       case 'get': { const { last } = await get('last'); return reply(last || null); }
+      case 'history': { const { history = [], last } = await get(['history', 'last']); return reply(history.length ? history : last ? [last] : []); }
       default: return reply(null);
     }
   }).catch((e) => reply({ ok: false, error: String(e && e.message || e) }));

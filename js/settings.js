@@ -2,7 +2,7 @@
 (function (root) {
   const TSD = (root.TSD = root.TSD || {});
   const KEY = 'tsd-settings';
-  const DEFAULTS = { style: 'spy', proxyUrl: '', showListeners: false };
+  const DEFAULTS = { style: 'spy', proxyUrl: '', showListeners: false, googleClientId: '' };
   function get() {
     let stored = {};
     try { stored = JSON.parse(root.localStorage.getItem(KEY) || '{}'); } catch (e) { stored = {}; }
