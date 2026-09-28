@@ -21,7 +21,10 @@
 
   // ---- Digital Lens web app ----
   document.documentElement.setAttribute('data-dl-recorder', VERSION);
-  send({ type: 'dl-seen', url: location.origin + location.pathname });
+  // Remember this page for "Finish & open report" only if it has Ecommerce Audit (the live site
+  // may be older than staging); js/ecomaudit.js marks the page with data-dl-ecom.
+  const remember = () => { if (document.documentElement.hasAttribute('data-dl-ecom')) send({ type: 'dl-seen', url: location.origin + location.pathname }); };
+  if (document.readyState === 'complete') remember(); else window.addEventListener('load', remember);
   const reply = (payload) => window.postMessage({ __dlRecorderReply: true, version: VERSION, ...payload }, location.origin);
   window.addEventListener('message', async (e) => {
     if (e.source !== window || e.origin !== location.origin || !e.data || !e.data.__dlApp) return;
