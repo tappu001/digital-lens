@@ -4,26 +4,10 @@
 (function (root) {
   const TSD = (root.TSD = root.TSD || {});
 
-  const CATEGORY = {
-    'GA4': 'Analytics', 'Universal Analytics': 'Analytics', 'Google tag': 'Analytics', 'Google Tag Manager': 'Tag management',
-    'Google Ads': 'Advertising', 'Google Floodlight': 'Advertising', 'Meta Pixel': 'Advertising', 'TikTok Pixel': 'Advertising',
-    'Snapchat Pixel': 'Advertising', 'Pinterest Tag': 'Advertising', 'LinkedIn Insight': 'Advertising', 'Microsoft UET': 'Advertising',
-    'X (Twitter) Pixel': 'Advertising', 'Reddit Pixel': 'Advertising', 'Quora Pixel': 'Advertising', 'OpenAI Pixel': 'Advertising',
-    'Criteo': 'Advertising', 'AdRoll': 'Advertising', 'Amazon Ads': 'Advertising', 'Taboola': 'Advertising', 'Outbrain': 'Advertising',
-    'Microsoft Clarity': 'Session recording', 'Hotjar': 'Session recording', 'Crazy Egg': 'Session recording', 'FullStory': 'Session recording',
-    'Mouseflow': 'Session recording', 'Lucky Orange': 'Session recording',
-    'Klaviyo': 'Marketing automation', 'HubSpot': 'Marketing automation', 'MoEngage': 'Marketing automation', 'Braze': 'Marketing automation',
-    'Stape': 'Server-side tagging',
-  };
-  const CATEGORY_ORDER = ['Tag management', 'Analytics', 'Advertising', 'Session recording', 'Product analytics', 'Experimentation', 'Marketing automation', 'Customer data', 'Customer engagement', 'Customer support', 'Server-side tagging', 'Consent'];
-
-  // On-page scanner names → inventory names
-  const ALIAS = {
-    'Google Analytics 4 / Google tag': 'GA4', 'Google Ads Conversion Tracking': 'Google Ads', 'Google Ads Remarketing': 'Google Ads',
-    'Floodlight': 'Google Floodlight', 'Microsoft Advertising UET': 'Microsoft UET', 'X (Twitter) Base Pixel': 'X (Twitter) Pixel',
-    'Hotjar Tracking Code': 'Hotjar', 'Criteo OneTag': 'Criteo', 'AdRoll Smart Pixel': 'AdRoll',
-  };
-  const canonical = (n) => ALIAS[n] || n;
+  // Categories and names come from the platform registry (js/core/platforms.js).
+  const P = () => TSD.platforms;
+  const canonical = (n) => P().canonical(n);
+  const categoryOf = (n) => P().categoryOf(n);
 
   // Built-in GTM tag types → platform
   const BUILTIN = {
@@ -115,6 +99,11 @@
       const rule = ID_RULES[name];
       put(name, rule ? [...keyValues(p, rule.keys), ...matchAll(rule.re, text)] : []);
     });
+    // Custom HTML / Custom Image: every registry platform its code loads, with IDs from its init call.
+    if (t.fn === '__html' || t.fn === '__img') {
+      const code = t.fn === '__html' ? (t.html || '') : String(val('url') || '');
+      P().detect(code).forEach((x) => { if (x.name !== 'GA4' && x.name !== 'Google Ads' && x.name !== 'Google tag') put(x.name, x.ids); });
+    }
     // gtag.js inside Custom HTML → GA4 / Google Ads by its explicit IDs.
     if (t.fn === '__html' && t.htmlInsight) {
       const ids = new Set([...(t.html || '').matchAll(/gtag\s*\(\s*['"]config['"]\s*,\s*['"]((?:G|AW|DC)-[A-Za-z0-9]+)/g), ...(t.html || '').matchAll(/gtag\/js\?id=((?:G|AW|DC)-[A-Za-z0-9]+)/g)].map((m) => m[1].toUpperCase()));
@@ -126,24 +115,35 @@
 
   function build(site, containers) {
     const rows = {};
-    const row = (name) => (rows[name] || (rows[name] = { name, category: CATEGORY[name] || 'Other', onPage: null, gtm: [] }));
+    const row = (name) => (rows[name] || (rows[name] = { name, category: categoryOf(name), onPage: null, gtm: [], apps: [] }));
 
     // ---- On page (static HTML) ----
     if (site) {
-      const html = site.html || '';
       (site.integrations || []).forEach((x) => {
         const name = canonical(x.name);
         if (name === 'Google Tag Manager') return;
         const r = row(name);
-        r.category = CATEGORY[name] || x.category || r.category;
         const ids = new Set();
         (x.ids || []).forEach((i) => add(ids, i));
         (site.onPageIds && site.onPageIds[name] || []).forEach((i) => add(ids, i));
-        r.onPage = { ids, count: Math.max(1, x.count || ids.size || 1) };
+        r.onPage = { ids, count: Math.max(1, x.count || ids.size || 1), via: [], viaIds: {} };
       });
       const gtmIds = site.gtmIds || [];
-      if (gtmIds.length) row('Google Tag Manager').onPage = { ids: new Set(gtmIds), count: gtmIds.length };
-      void html;
+      if (gtmIds.length) row('Google Tag Manager').onPage = { ids: new Set(gtmIds), count: gtmIds.length, via: [], viaIds: {} };
+
+      // ---- WordPress plugins (their code is in the page) and Shopify app pixels (sandboxed) ----
+      (site.sources || []).forEach((src) => {
+        src.platforms.forEach((p) => {
+          const r = row(canonical(p.name));
+          if (src.kind === 'Shopify app') {
+            r.apps.push({ name: src.name, ids: new Set(p.ids) });
+            return;
+          }
+          if (!r.onPage) r.onPage = { ids: new Set(), count: 1, via: [], viaIds: {} };
+          r.onPage.via.includes(src.name) || r.onPage.via.push(src.name);
+          p.ids.forEach((i) => { add(r.onPage.ids, i); (r.onPage.viaIds[i] || (r.onPage.viaIds[i] = [])).push(src.name); });
+        });
+      });
     }
 
     // ---- GTM containers ----
@@ -159,32 +159,44 @@
         });
       });
       (c.summary && c.summary.serverUrls || []).forEach((u) => { const e = per['Server-side GTM'] || (per['Server-side GTM'] = { containerId: c.containerId, tags: 0, paused: 0, ids: new Set() }); e.ids.add(u); });
-      Object.entries(per).forEach(([name, e]) => { const r = row(name); if (name === 'Server-side GTM') r.category = 'Server-side tagging'; r.gtm.push(e); });
+      Object.entries(per).forEach(([name, e]) => row(canonical(name)).gtm.push(e));
     });
 
     const list = Object.values(rows).map((r) => {
       const ids = {};
       const note = (id, where) => { (ids[id] || (ids[id] = [])).includes(where) || ids[id].push(where); };
-      if (r.onPage) r.onPage.ids.forEach((i) => note(i, 'On page'));
+      if (r.onPage) r.onPage.ids.forEach((i) => note(i, r.onPage.viaIds[i] ? r.onPage.viaIds[i].join(', ') : 'On page'));
       r.gtm.forEach((g) => g.ids.forEach((i) => note(i, g.containerId)));
-      const where = [r.onPage ? 'On page' : null, ...r.gtm.map((g) => g.containerId)].filter(Boolean);
+      r.apps.forEach((a) => a.ids.forEach((i) => note(i, 'Shopify app')));
+      const parts = [r.onPage ? 'On page' : null, r.gtm.length ? 'GTM' : null, r.apps.length ? 'Shopify app' : null].filter(Boolean);
       return {
         name: r.name, category: r.category,
         ids: Object.entries(ids).map(([id, w]) => ({ id, where: w })),
-        where,
-        implementation: r.onPage && r.gtm.length ? 'On page + GTM' : r.onPage ? 'On page' : 'GTM',
-        onPage: r.onPage ? { count: r.onPage.count } : null,
+        where: [r.onPage ? 'On page' : null, ...r.gtm.map((g) => g.containerId), r.apps.length ? 'Shopify app' : null].filter(Boolean),
+        implementation: parts.join(' + '),
+        via: r.onPage ? r.onPage.via : [],
+        onPage: r.onPage ? { count: r.onPage.count, via: r.onPage.via } : null,
         gtm: r.gtm.map((g) => ({ containerId: g.containerId, tags: g.tags, paused: g.paused })),
+        apps: r.apps.map((a) => ({ name: a.name })),
       };
     });
+    const order = P().CATEGORIES;
     list.sort((a, b) => {
-      const ca = CATEGORY_ORDER.indexOf(a.category); const cb = CATEGORY_ORDER.indexOf(b.category);
+      const ca = order.indexOf(a.category); const cb = order.indexOf(b.category);
       return (ca < 0 ? 99 : ca) - (cb < 0 ? 99 : cb) || a.name.localeCompare(b.name);
     });
+    const categories = order.map((category) => ({ category, count: list.filter((x) => x.category === category).length })).filter((x) => x.count);
     return {
       rows: list,
+      categories,
+      sources: site ? site.sources || [] : [],
       totals: {
         platforms: list.length,
+        categories: categories.length,
+        withIds: list.filter((x) => x.ids.length).length,
+        onPage: list.filter((x) => x.onPage).length,
+        gtm: list.filter((x) => x.gtm.length).length,
+        apps: list.filter((x) => x.apps.length || x.via.length).length,
         onPageOnly: list.filter((x) => x.implementation === 'On page').length,
         gtmOnly: list.filter((x) => x.implementation === 'GTM').length,
         both: list.filter((x) => x.implementation === 'On page + GTM').length,
@@ -192,5 +204,5 @@
     };
   }
 
-  TSD.inventory = { build, tagPlatforms, CATEGORY };
+  TSD.inventory = { build, tagPlatforms };
 })(typeof globalThis !== 'undefined' ? globalThis : window);

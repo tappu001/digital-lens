@@ -14,7 +14,7 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp' };
 
 // Load the same decoder the browser uses, for the /api/decode endpoint
-['catalog', 'parser', 'naming', 'decoder', 'audit', 'sitescan', 'snapshots', 'scan'].forEach((m) => require(`./js/core/${m}.js`));
+['catalog', 'parser', 'naming', 'decoder', 'audit', 'platforms', 'sitescan', 'snapshots', 'scan'].forEach((m) => require(`./js/core/${m}.js`));
 const TSD = globalThis.TSD;
 
 function send(res, status, body, type = 'application/json; charset=utf-8') {

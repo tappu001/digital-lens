@@ -796,3 +796,22 @@ body { color: var(--ink); -webkit-font-smoothing: antialiased; }
 .g-intro h1 { font: 700 38px/1.08 "Space Grotesk", var(--font); letter-spacing: -.04em; margin: 0; }
 .g-intro p { color: #66748b; font-size: 15px; line-height: 1.55; max-width: 720px; margin: 12px 0 0; }
 @media (max-width: 620px) { .g-intro h1 { font-size: 30px; } }
+
+/* Website Insights: categories, plugin / app sources */
+.cat-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; vertical-align: 1px; flex: none; }
+.grid.inv tr.cat-row td { background: #f5f8fd; color: #3a4a63; font-size: 11px; padding: 9px 16px; }
+.grid.inv tr.cat-row .cat-n { margin-left: 8px; padding: 1px 7px; border-radius: 99px; background: #fff; border: 1px solid #dce5f2; color: #5b6a82; letter-spacing: 0; }
+.cat-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 14px; }
+.cat-chip { display: inline-flex; align-items: center; gap: 2px; height: 32px; padding: 0 12px; border-radius: 99px; border: 1px solid #dce5f2; background: #fff; color: #3a4a63; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background .15s, border-color .15s; }
+.cat-chip b { margin-left: 6px; font-size: 11px; color: #5b6a82; background: #f1f5fb; border-radius: 99px; padding: 1px 7px; }
+.cat-chip:hover { border-color: #b9d0f5; background: #f7faff; }
+.cat-chip.on { background: #08152e; border-color: #08152e; color: #fff; }
+.cat-chip.on b { background: rgba(255, 255, 255, .16); color: #fff; }
+.wb.app { background: #eef7e8; color: #3f7d20; border-color: #cfe6c0; }
+.via { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.src-list { list-style: none; margin: 0; padding: 0; }
+.src-list li { display: grid; grid-template-columns: minmax(180px, 260px) 1fr; gap: 12px; padding: 12px 0; border-top: 1px solid #edf1f7; }
+.src-list li:first-child { border-top: 0; padding-top: 0; }
+.src-list li > div:first-child { display: flex; flex-direction: column; gap: 2px; }
+.src-list code { font-size: 11px; }
+@media (max-width: 700px) { .src-list li { grid-template-columns: 1fr; } }
