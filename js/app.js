@@ -168,6 +168,7 @@
     if (m === 'ga4') return state.ga4.report ? `#ga4?id=${encodeURIComponent(state.ga4.report.measurementId)}` : '#ga4';
     if (m === 'website') return state.inputs.website && state.results.website ? `#website?url=${encodeURIComponent(state.inputs.website)}` : '#website';
     if (m === 'app') return '#app';
+    if (m === 'ecom') return /^#ecom/.test(location.hash) ? location.hash : '#ecom';
     return '#home';
   }
   function syncHash(push) {
@@ -183,7 +184,7 @@
       if (/^(G|GT|AW|DC)-[A-Z0-9]{4,15}$/i.test(v)) { setMode('ga4', true); ga4Load(v); } else { setMode('gtm', true); decode({ input: v }); }
       return;
     }
-    const m = /^#(home|gtm|ga4|website|app)(?:\?(.*))?$/.exec(h);
+    const m = /^#(home|gtm|ga4|website|app|ecom)(?:\?(.*))?$/.exec(h);
     const mode = m ? m[1] : 'home';
     const p = new URLSearchParams(m && m[2] ? m[2] : '');
     setMode(mode, true);
@@ -214,6 +215,7 @@
     if (state.mode === 'app') { if (!render.appMounted) { render.appMounted = true; TSD.appInspector.mount($('#view')); } return; }
     if (render.appMounted) { render.appMounted = false; TSD.appInspector.unmount(); }
     if (state.mode === 'home') { $('#view').innerHTML = viewWorkspace(); return; }
+    if (state.mode === 'ecom') { TSD.ecomAudit.render($('#view')); return; }
     if (state.mode === 'ga4') { $('#view').innerHTML = viewGA4(); bindGA4(); return; }
     if (state.mode === 'website') { $('#view').innerHTML = state.result && state.result.site ? viewWebsiteOnly() : viewWebsiteLanding(); return; }
     if (!c) { $('#view').innerHTML = state.view === 'scan' && state.result ? viewScanOnly() : viewLanding(); return; }
@@ -260,6 +262,7 @@
         <button class="audit-card gtm" data-mode="gtm"><span class="audit-icon">◈</span><span class="audit-title">GTM Audit</span><span class="audit-desc">Open any published container and read its tags, triggers and variables with clean names, plus IDs by platform, weight and load time.</span><span class="audit-cta">Open GTM audit →</span></button>
         <button class="audit-card ga4" data-mode="ga4"><span class="audit-icon">◉</span><span class="audit-title">GA4 Inspector</span><span class="audit-desc">Enter a Measurement ID or website and see its GA4 setup: enhanced measurement, key events, create and modify events, domains, referrals and data collection.</span><span class="audit-cta">Inspect a Measurement ID →</span></button>
         <button class="audit-card app" data-mode="app"><span class="audit-icon">▣</span><span class="audit-title">App Inspector <span class="soon-pill">Coming soon</span></span><span class="audit-desc">Connect an Android phone over USB and watch Firebase / GA4, Meta, Google Ads, TikTok, Snapchat, AppsFlyer and Adjust events fire live, with every parameter.</span><span class="audit-cta">Preview what's coming →</span></button>
+        <button class="audit-card ecom" data-mode="ecom"><span class="audit-icon">⛁</span><span class="audit-title">Ecommerce Audit</span><span class="audit-desc">Record a shop once and check every ecommerce event and parameter against the GA4 standard, with comments and a Google Sheets export.</span><span class="audit-cta">Audit ecommerce →</span></button>
         <button class="audit-card web" data-mode="website"><span class="audit-icon">◌</span><span class="audit-title">Website Insights</span><span class="audit-desc">Scan a live website independently to identify platforms, pixels, analytics IDs, containers, scripts and tracking technologies.</span><span class="audit-cta">Scan a website →</span></button>
       </div>
       <div class="principles"><div><b>Separate tools.</b><span>No mixed dashboards.</span></div><div><b>Readable names.</b><span>Technical IDs stay secondary.</span></div><div><b>Evidence first.</b><span>Private data is marked "Not publicly exposed", never guessed.</span></div></div>
