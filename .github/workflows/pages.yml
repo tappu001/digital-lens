@@ -1,0 +1,58 @@
+name: Publish site
+
+# Publishes the live site from `main` at the site root and the test copy from `staging`
+# at /staging/. Runs on every push to main; pushes to staging start it through
+# staging-trigger.yml (the github-pages environment only deploys from main).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main
+      - name: Checkout staging
+        id: staging
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          ref: staging
+          path: staging
+      - name: Assemble site
+        run: |
+          mkdir _site
+          rsync -a --exclude .git --exclude .github main/ _site/
+          if [ "${{ steps.staging.outcome }}" = "success" ]; then
+            rsync -a --exclude .git --exclude .github staging/ _site/staging/
+            python3 main/.github/scripts/mark_staging.py _site/staging
+          fi
+          touch _site/.nojekyll
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
