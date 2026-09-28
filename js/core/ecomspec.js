@@ -137,7 +137,7 @@
     if (Array.isArray(data)) return { source: 'Pasted dataLayer', pages: [{ url: '', pushes: data.map((d, i) => ({ i, data: d })) }], hits: [], hitsCaptured: false };
     if (data && data.app === 'digital-lens-recorder') {
       return {
-        source: 'Digital Lens Recorder', startedAt: data.startedAt, site: data.site || '',
+        id: data.id ? `rec-${data.id}` : '', source: 'Digital Lens Recorder', startedAt: data.startedAt, site: data.site || '',
         pages: (data.pages || []).map((pg) => ({ url: pg.url || '', title: pg.title || '', pushes: (pg.pushes || []).map((x, i) => ({ i, t: x.t, data: x.data })) })),
         hits: data.hits || [], hitsCaptured: true,
       };
@@ -190,10 +190,51 @@
   const missingLevel = (req) => (/^required/i.test(req) ? 'error' : /^recommended/i.test(req) ? 'warn' : 'info');
   const missingComment = (par) => (/^required/i.test(par.req) ? `Missing required parameter "${par.name}".` : /^recommended/i.test(par.req) ? `Recommended parameter "${par.name}" is not sent.` : `Optional parameter "${par.name}" is not sent.`);
 
+  // What the user does on the site for each event (used in "not fired" advice).
+  const ACTION = {
+    view_item_list: 'a product list or category page is shown', select_item: 'a product is clicked in a list', view_item: 'a product page is shown',
+    add_to_wishlist: 'a product is added to the wishlist', add_to_cart: 'a product is added to the cart', remove_from_cart: 'a product is removed from the cart',
+    view_cart: 'the cart is shown', begin_checkout: 'checkout starts', add_shipping_info: 'a shipping method is chosen', add_payment_info: 'a payment method is chosen',
+    purchase: 'the order is confirmed (thank-you page)', refund: 'an order is refunded', view_promotion: 'a promotion banner is shown', select_promotion: 'a promotion banner is clicked',
+  };
+  const itemsTotal = (P) => {
+    const items = Array.isArray(P.items) ? P.items : [];
+    if (!items.length || !items.every((it) => it && (isNum(it.price) || numLike(it.price)))) return null;
+    return round2(items.reduce((n, it) => n + Number(it.price) * (it.quantity === undefined ? 1 : Number(it.quantity) || 0), 0));
+  };
+  const unquote = (a) => String(a || '').replace(/^"|"$/g, '');
+  // Plain-English "how to fix" for one finding.
+  function fixFor(r, evSpec, P, ctx) {
+    const ev = evSpec.name;
+    const c = r.comment || '';
+    if (r.param === '(GA4 hit)') return `In GTM, make sure a GA4 Event tag with event name "${ev}" fires on the Custom Event trigger "${ev}", with "Send ecommerce data" on.`;
+    if (r.param === 'ecommerce: null') return `Push dataLayer.push({ ecommerce: null }) right before the ${ev} push.`;
+    if (r.param === 'ecommerce' && /legacy/i.test(c)) return 'Rebuild this push in GA4 format: event name from the standard and ecommerce.items with item_id, item_name, price and quantity.';
+    if (r.param === 'ecommerce') return 'Move the parameters inside an "ecommerce" object: dataLayer.push({ event: "' + ev + '", ecommerce: { … } }).';
+    if (r.param === '(format)') return '';
+    if (r.param === 'transaction_id' && /more than once/.test(c)) return 'Push purchase only once per order (for example only on the first load of the thank-you page).';
+    if (/item_id \/ item_name|item_id or item_name/.test(r.param + r.expected)) return 'Add item_id (the SKU) and item_name to every item.';
+    if (/^Sent as text/.test(c)) return `Send ${r.param} as a number: ${Number(unquote(r.actual))} (no quotes).`;
+    if (/3-letter currency/.test(c)) return `Use the ISO currency code in capitals: "${(unquote(r.actual) || ctx.currency || 'USD').toUpperCase().slice(0, 3)}".`;
+    if (r.param === 'value' && /does not match/.test(c)) { const t = itemsTotal(P); return t === null ? 'Set value to the sum of price × quantity of the items.' : `Set value to ${t} (sum of price × quantity${/shipping/.test(c) ? ', without shipping and tax' : ''}).`; }
+    if (r.actual === '(not sent)') {
+      const ex = r.param === 'currency' ? `"${ctx.currency || 'USD'}"` : r.param === 'value' ? (itemsTotal(P) !== null ? itemsTotal(P) : 'the order total') : r.param === 'items' ? '[ … the products … ]' : r.param === 'transaction_id' ? 'the order ID' : '';
+      return `Add "${r.param}"${ex ? ` (e.g. ${ex})` : ''} ${r.scope.startsWith('Item') ? 'to each item' : 'to the ecommerce object'} of ${ev}.`;
+    }
+    if (/whole number/.test(c)) return `Send ${r.param} as a whole number, e.g. 1.`;
+    if (/Must be a number/.test(c)) return `Send ${r.param} as a number.`;
+    if (/items array is empty/.test(c)) return 'Put the products of this event in ecommerce.items.';
+    if (r.param === 'quantity') return 'Send quantity 1 or more.';
+    if (r.param === 'price') return 'Send the real (positive) unit price.';
+    if (r.param === 'items' && r.req === 'Check') return 'Send only the clicked product in select_item.';
+    if (r.req === 'Not in standard') return '';
+    return '';
+  }
+
   function checkOccurrence(spec, evSpec, occ, ctx) {
     const res = [];
     const P = occ.params || {};
-    const add = (r) => res.push({ event: evSpec.name, occurrence: occ.n, page: occ.page, ...r });
+    const add = (r) => res.push({ event: evSpec.name, occurrence: occ.n, page: occ.page, ...r, fix: r.level === 'ok' ? '' : fixFor(r, evSpec, P, ctx) });
     if (occ.ua) add({ scope: 'Event', param: 'ecommerce', req: 'Required', expected: 'GA4 format: ecommerce.items', actual: `ecommerce.${occ.ua.join(', ecommerce.')}`, level: 'error', comment: 'Universal Analytics (legacy) ecommerce format. GA4 needs ecommerce.items with GA4 parameter names.' });
     if (occ.where === 'top') add({ scope: 'Event', param: 'ecommerce', req: 'Required', expected: 'Parameters inside "ecommerce"', actual: 'Parameters at the top level', level: 'warn', comment: 'Parameters are not inside the ecommerce object. GA4 ecommerce in GTM ("Send ecommerce data") reads only dataLayer.ecommerce.' });
     if (occ.where === 'gtag') add({ scope: 'Event', param: '(format)', req: 'Info', expected: 'dataLayer.push', actual: 'gtag("event")', level: 'info', comment: 'Sent with gtag() instead of a dataLayer push. Fine for gtag.js sites; GTM ecommerce variables will not see it.' });
@@ -255,6 +296,76 @@
     return res;
   }
 
+  // ---------- site-specific standard code ----------
+  // Facts from the recording (currency, a real product, list name) so the "correct dataLayer"
+  // examples use this website's own values instead of Google's sample data.
+  function allPushes(session) { return session.pages.flatMap((pg) => pg.pushes.map((x) => ({ ...readPush(x.data), raw: x.data, page: pg.url }))).filter((r) => r && r.event); }
+  function siteFacts(session) {
+    const pushes = allPushes(session);
+    const cur = pushes.map((r) => r.params && r.params.currency).find((c) => typeof c === 'string' && /^[A-Za-z]{3}$/.test(c));
+    const byEvent = (n) => pushes.find((r) => r.event === n && Array.isArray(r.params.items) && r.params.items.length);
+    const src = byEvent('view_item') || byEvent('add_to_cart') || pushes.find((r) => r.params && Array.isArray(r.params.items) && r.params.items.length);
+    const list = pushes.map((r) => r.params && (r.params.item_list_name || (Array.isArray(r.params.items) && r.params.items[0] && r.params.items[0].item_list_name))).find(Boolean);
+    return { currency: cur ? cur.toUpperCase() : '', items: src ? src.params.items : [], listName: list || '', pushes };
+  }
+  const ITEM_ORDER = ['item_id', 'item_name', 'affiliation', 'coupon', 'discount', 'index', 'item_brand', 'item_category', 'item_category2', 'item_category3', 'item_category4', 'item_category5', 'item_list_id', 'item_list_name', 'item_variant', 'location_id', 'price', 'quantity'];
+  const toNum = (v) => (isNum(v) ? v : numLike(v) ? Number(v) : v);
+  function standardItem(it, extra = {}) {
+    const src = { ...(it && typeof it === 'object' ? it : {}), ...extra };
+    const out = {};
+    ITEM_ORDER.forEach((k) => {
+      let v = src[k];
+      if (v === undefined || v === null || v === '') {
+        if (k === 'item_id') v = '<SKU>';
+        else if (k === 'item_name') v = '<product name>';
+        else if (['item_brand', 'item_category', 'item_variant'].includes(k)) v = `<${k}>`;
+        else if (k === 'price') v = '<unit price>';
+        else if (k === 'quantity') v = 1;
+        else return;
+      }
+      if (['price', 'discount'].includes(k)) v = toNum(v);
+      if (['quantity', 'index'].includes(k)) { v = toNum(v); if (isNum(v)) v = Math.max(k === 'quantity' ? 1 : 0, Math.round(v)); }
+      out[k] = v;
+    });
+    Object.keys(src).forEach((k) => { if (!(k in out) && /^(item_|promotion_|creative_)/.test(k)) out[k] = src[k]; });
+    return out;
+  }
+  function siteExample(session, evName, spec = GA4_STANDARD) {
+    const ev = spec.events.find((e) => e.name === evName);
+    if (!ev) return '';
+    const f = siteFacts(session);
+    const fired = f.pushes.find((r) => r.event === evName);
+    const P = fired ? fired.params : {};
+    const eco = {};
+    const isPromo = /promotion/.test(evName);
+    let items = Array.isArray(P.items) && P.items.length ? P.items : f.items.length ? f.items : [{}];
+    items = items.map((it) => standardItem(it, isPromo ? { promotion_id: (it && it.promotion_id) || P.promotion_id || '<promotion_id>', promotion_name: (it && it.promotion_name) || P.promotion_name || '<promotion_name>' } : {}));
+    if (evName === 'select_item') items = items.slice(0, 1);
+    const sum = items.every((it) => isNum(it.price)) ? round2(items.reduce((n, it) => n + it.price * (isNum(it.quantity) ? it.quantity : 1), 0)) : null;
+    ev.params.forEach((x) => {
+      const v = P[x.name];
+      const has = v !== undefined && v !== null && v !== '';
+      if (x.name === 'items') eco.items = items;
+      else if (x.name === 'currency') eco.currency = has && typeof v === 'string' ? v.toUpperCase() : f.currency || '<currency>';
+      else if (x.name === 'value') eco.value = sum !== null ? sum : has ? toNum(v) : '<order total>';
+      else if (x.name === 'transaction_id') eco.transaction_id = has ? v : '<order ID>';
+      else if (['tax', 'shipping'].includes(x.name)) { if (has || x.req !== 'Optional') eco[x.name] = has ? toNum(v) : `<${x.name}>`; }
+      else if (x.name === 'item_list_name') eco.item_list_name = has ? v : f.listName || '<list name>';
+      else if (x.name === 'item_list_id') eco.item_list_id = has ? v : '<list id>';
+      else if (x.name === 'shipping_tier') eco.shipping_tier = has ? v : '<shipping option>';
+      else if (x.name === 'payment_type') eco.payment_type = has ? v : '<payment method>';
+      else if (has) eco[x.name] = v;
+      else if (x.req !== 'Optional') eco[x.name] = `<${x.name}>`;
+    });
+    return `dataLayer.push({ ecommerce: null });  // clear the previous ecommerce object\ndataLayer.push(${JSON.stringify({ event: evName, ecommerce: eco }, null, 2)});`;
+  }
+  // The push the site actually sent for an event (first occurrence), as readable code.
+  function firedCode(session, evName) {
+    const r = allPushes(session).find((x) => x.event === evName);
+    if (!r) return '';
+    return r.where === 'gtag' ? `gtag("event", "${evName}", ${JSON.stringify(r.raw[2] || {}, null, 2)});` : `dataLayer.push(${JSON.stringify(r.raw, null, 2)});`;
+  }
+
   function audit(session, spec = GA4_STANDARD) {
     const occs = [];
     let lastCleared = true; let ecomCount = 0;
@@ -271,23 +382,24 @@
       });
     });
 
+    const siteCurrency = siteFacts(session).currency;
     const hitsBy = {};
     (session.hits || []).forEach((h) => { (hitsBy[h.en] || (hitsBy[h.en] = [])).push(h); });
 
     const events = spec.events.map((evSpec) => {
       const mine = occs.filter((o) => o.event === evSpec.name);
       const rows = [];
-      mine.forEach((occ) => rows.push(...checkOccurrence(spec, evSpec, occ, { ecomCount })));
+      mine.forEach((occ) => rows.push(...checkOccurrence(spec, evSpec, occ, { ecomCount, currency: siteCurrency })));
       if (evSpec.name === 'purchase') {
         const ids = mine.map((o) => o.params && o.params.transaction_id).filter(Boolean);
         const dup = ids.filter((x, i) => ids.indexOf(x) !== i);
-        if (dup.length) rows.push({ event: 'purchase', occurrence: 2, page: '', scope: 'Event', param: 'transaction_id', req: 'Check', expected: 'Unique per order', actual: [...new Set(dup)].join(', '), level: 'error', comment: 'The same transaction_id was pushed more than once: purchases will be double counted unless GA4 deduplicates them.' });
+        if (dup.length) rows.push({ event: 'purchase', occurrence: 2, page: '', scope: 'Event', param: 'transaction_id', req: 'Check', expected: 'Unique per order', actual: [...new Set(dup)].join(', '), level: 'error', comment: 'The same transaction_id was pushed more than once: purchases will be double counted unless GA4 deduplicates them.', fix: 'Push purchase only once per order (for example only on the first load of the thank-you page).' });
       }
       let hit = null;
       if (session.hitsCaptured && mine.length) {
         const sent = (hitsBy[evSpec.name] || []).length;
         hit = { sent };
-        if (!sent) rows.push({ event: evSpec.name, occurrence: 1, page: mine[0].page, scope: 'Event', param: '(GA4 hit)', req: 'Check', expected: 'A GA4 request with en=' + evSpec.name, actual: 'No GA4 request', level: 'error', comment: 'The dataLayer event was pushed but no GA4 hit was sent for it: check the GA4 event tag and its trigger in GTM.' });
+        if (!sent) rows.push({ event: evSpec.name, occurrence: 1, page: mine[0].page, scope: 'Event', param: '(GA4 hit)', req: 'Check', expected: 'A GA4 request with en=' + evSpec.name, actual: 'No GA4 request', level: 'error', comment: 'The dataLayer event was pushed but no GA4 hit was sent for it: check the GA4 event tag and its trigger in GTM.', fix: `In GTM, make sure a GA4 Event tag with event name "${evSpec.name}" fires on the Custom Event trigger "${evSpec.name}", with "Send ecommerce data" on.` });
       }
       const worst = rows.some((r) => r.level === 'error') ? 'error' : rows.some((r) => r.level === 'warn') ? 'warn' : mine.length ? 'ok' : 'missing';
       return { name: evSpec.name, label: evSpec.label, step: evSpec.step, fired: mine.length, status: worst, rows, occurrences: mine, hit, core: CORE.includes(evSpec.name) };
@@ -320,7 +432,7 @@
         out.push({ event: e.name, step: e.step, eventStatus: 'Not fired', occurrence: '', scope: 'Event', param: '—', req: '', expected: 'Event should fire', actual: '(not in recording)', result: 'Not fired', comment: e.core ? 'Core funnel event not seen in this recording. Trigger the action on the site; if it still does not fire, it is not implemented.' : 'Not seen in this recording (trigger the action on the site to test it).', page: '' });
         return;
       }
-      e.rows.forEach((r) => out.push({ event: e.name, step: e.step, eventStatus: LEVEL_TEXT[e.status], occurrence: r.occurrence, scope: r.scope, param: r.param, req: r.req, expected: r.expected, actual: r.actual, result: LEVEL_TEXT[r.level], comment: r.comment, page: r.page || '' }));
+      e.rows.forEach((r) => out.push({ event: e.name, step: e.step, eventStatus: LEVEL_TEXT[e.status], occurrence: r.occurrence, scope: r.scope, param: r.param, req: r.req, expected: r.expected, actual: r.actual, result: LEVEL_TEXT[r.level], comment: r.comment, fix: r.fix || '', page: r.page || '' }));
     });
     return out;
   }
@@ -345,36 +457,73 @@
     rows: spec.events.map((e) => [{ v: e.name, s: 'bold' }, { v: spec.custom ? '' : exampleCode(e), s: 'code' }]),
   });
 
+  const STATUS_TEXT = { ok: '✅ OK', warn: '⚠️ Needs fixes', error: '❌ Broken', missing: '— Not fired' };
+  const STATUS_STYLE = { ok: 'ok', warn: 'warn', error: 'error', missing: 'missing' };
+  const lineCount = (t) => String(t || '').split('\n').length;
+
+  // "Issues to fix": one row per problem (errors, then warnings, then events not fired), same problems merged.
+  function issueRows(report) {
+    const out = []; const seen = {};
+    ['error', 'warn'].forEach((lvl) => report.events.forEach((e) => e.rows.filter((r) => r.level === lvl).forEach((r) => {
+      const key = [e.name, r.scope.startsWith('Item') ? 'item' : r.scope, r.param, r.comment].join('|');
+      if (seen[key]) { seen[key].times++; return; }
+      seen[key] = { event: e.name, severity: lvl === 'error' ? 'Error' : 'Warning', param: r.param, scope: r.scope.startsWith('Item') ? 'Items' : 'Event', problem: r.comment, fix: r.fix || '', page: r.page || '', times: 1 };
+      out.push(seen[key]);
+    })));
+    report.events.filter((e) => !e.fired).sort((a, b) => (b.core ? 1 : 0) - (a.core ? 1 : 0)).forEach((e) => out.push({
+      event: e.name, severity: 'Not fired', param: '—', scope: 'Event', problem: e.core ? 'Core funnel event not seen in this recording.' : 'Not seen in this recording.',
+      fix: `Push ${e.name} when ${ACTION[e.name] || 'the action happens'} (see the "dataLayer code" sheet). If you did not do this step while recording, test it again first.`, page: '', times: 1,
+    }));
+    return out;
+  }
+
   function workbook(report, meta = {}) {
     const spec = meta.spec || GA4_STANDARD;
+    const session = meta.session || { pages: [] };
+    const site = meta.site || report.site || '—';
     const when = meta.date || new Date().toISOString().slice(0, 16).replace('T', ' ');
     const s = report.summary;
-    const summaryRows = report.events.map((e) => {
-      const errors = e.rows.filter((r) => r.level === 'error').length;
-      const warns = e.rows.filter((r) => r.level === 'warn').length;
-      const main = (e.rows.find((r) => r.level === 'error') || e.rows.find((r) => r.level === 'warn') || {}).comment || (e.fired ? 'Matches the standard.' : 'Not seen in this recording.');
-      const status = LEVEL_TEXT[e.status];
-      return [{ v: e.name, s: 'bold' }, e.step, e.core ? 'Core' : '', e.fired, { v: status, s: RESULT_STYLE[status] }, report.hitsCaptured ? (e.fired ? (e.hit && e.hit.sent ? `Yes (${e.hit.sent})` : 'No') : '') : 'Not recorded', errors, warns, main];
+    const shortWrong = (e) => {
+      if (!e.fired) return e.core ? 'Not seen: this core event must fire.' : 'Not seen in this recording.';
+      const bad = e.rows.filter((r) => r.level === 'error' || r.level === 'warn');
+      if (!bad.length) return 'Matches the standard.';
+      const uniq = [...new Set(bad.map((r) => r.comment))];
+      return uniq.slice(0, 3).join(' ') + (uniq.length > 3 ? ` (+${uniq.length - 3} more — see Issues to fix)` : '');
+    };
+    const issues = issueRows(report);
+    const codeRows = report.events.map((e) => {
+      const fired = e.fired ? firedCode(session, e.name) : '(not fired on the site)';
+      const good = siteExample(session, e.name, spec);
+      return { cells: [{ v: e.name, s: 'bold' }, { v: STATUS_TEXT[e.status], s: STATUS_STYLE[e.status] }, { v: fired, s: 'code' }, { v: good, s: 'code' }], ht: Math.max(lineCount(fired), lineCount(good)) * 11.5 + 6 };
     });
     return [
       {
-        name: 'Summary', title: 'Digital Lens™ · Ecommerce dataLayer audit',
-        note: `Website: ${meta.site || report.site || '—'}   ·   Date: ${when}   ·   Standard: ${report.spec}   ·   Source: ${report.source}   ·   Pages: ${report.pages}   ·   dataLayer pushes: ${report.pushes}${report.hitsCaptured ? `   ·   GA4 hits: ${report.hits}` : ''}   ·   Events fired: ${s.fired}/${s.expected}   ·   OK ${s.ok} · Warnings ${s.warn} · Errors ${s.error} · Not fired ${s.missing}`,
-        widths: [20, 12, 7, 8, 11, 12, 8, 10, 80],
-        header: ['Event', 'Funnel step', 'Core', 'Fired', 'Status', 'GA4 hit sent', 'Errors', 'Warnings', 'Main finding'],
-        rows: summaryRows,
+        name: 'Summary', title: `Ecommerce dataLayer audit · ${site}`,
+        note: `Digital Lens™ · ${when} · ${report.spec} · ${report.source}: ${report.pages} page${report.pages === 1 ? '' : 's'}, ${report.pushes} dataLayer pushes${report.hitsCaptured ? `, ${report.hits} GA4 hits` : ''}`,
+        pre: [
+          [{ v: `Result: ${s.fired} of ${s.expected} events fired  ·  ${s.ok} OK  ·  ${s.warn} need fixes  ·  ${s.error} broken  ·  ${s.missing} not fired`, s: 'bold' }],
+          [{ v: 'Start with the "Issues to fix" sheet. The "dataLayer code" sheet shows what the site sends and the correct code for this website.', s: 'muted' }],
+        ],
+        widths: [20, 30, 16, 9, 13, 90],
+        header: ['Event', 'What it tracks', 'Status', 'Times fired', 'Sent to GA4', "What's wrong"],
+        rows: report.events.map((e) => [{ v: e.name, s: 'bold' }, e.label, { v: STATUS_TEXT[e.status], s: STATUS_STYLE[e.status] }, e.fired, report.hitsCaptured ? (e.fired ? (e.hit && e.hit.sent ? `Yes (${e.hit.sent})` : 'No') : '—') : 'Not checked', shortWrong(e)]),
       },
       {
-        name: 'Event audit', widths: [18, 11, 11, 4, 9, 20, 14, 26, 30, 10, 60, 40],
-        header: ['Event', 'Funnel step', 'Event status', '#', 'Scope', 'Parameter', 'Requirement', 'Standard', 'Fired value', 'Result', 'Comment', 'Page URL'],
-        rows: sheetRows(report).map((r) => [{ v: r.event, s: 'bold' }, r.step, { v: r.eventStatus, s: RESULT_STYLE[r.eventStatus] }, r.occurrence, r.scope, r.param, r.req, r.expected, r.actual, { v: r.result, s: RESULT_STYLE[r.result] }, r.comment, r.page]),
+        name: 'Issues to fix', widths: [5, 18, 11, 20, 50, 60, 36],
+        header: ['#', 'Event', 'Severity', 'Parameter', 'Problem', 'How to fix', 'Page'],
+        rows: issues.map((x, i) => [i + 1, { v: x.event, s: 'bold' }, { v: x.severity, s: x.severity === 'Error' ? 'error' : x.severity === 'Warning' ? 'warn' : 'missing' }, `${x.param}${x.scope === 'Items' ? ' (items)' : ''}`, x.problem + (x.times > 1 ? ` (×${x.times})` : ''), x.fix, x.page]),
       },
-      STANDARD_SHEET(spec),
-      CODE_SHEET(spec),
       {
-        name: 'Fired dataLayer', widths: [5, 40, 20, 90], header: ['#', 'Page URL', 'Event', 'dataLayer push'],
-        rows: (meta.session ? meta.session.pages : []).flatMap((pg) => pg.pushes.map((x) => [x.i + 1, pg.url, x.data && typeof x.data === 'object' ? (x.data.event || (x.data[0] === 'event' ? x.data[1] : '') || (x.data.ecommerce === null ? '(ecommerce: null)' : '')) : '', { v: JSON.stringify(x.data, null, 1).slice(0, 30000), s: 'code' }])),
+        name: 'dataLayer code', widths: [18, 14, 62, 62],
+        header: ['Event', 'Status', 'What the site sends now', `Correct dataLayer for ${site}`],
+        rows: codeRows,
       },
+      {
+        name: 'All checks', widths: [18, 11, 4, 9, 20, 14, 26, 30, 10, 55, 55, 36],
+        header: ['Event', 'Funnel step', '#', 'Scope', 'Parameter', 'Requirement', 'Standard', 'Fired value', 'Result', 'Comment', 'How to fix', 'Page URL'],
+        rows: sheetRows(report).map((r) => [{ v: r.event, s: 'bold' }, r.step, r.occurrence, r.scope, r.param, r.req, r.expected, r.actual, { v: r.result, s: RESULT_STYLE[r.result] }, r.comment, r.fix || '', r.page]),
+      },
+      { ...STANDARD_SHEET(spec), name: 'GA4 standard' },
     ];
   }
   // Blank template: how to use it, the standard (editable, re-upload as CSV) and the code.
@@ -399,5 +548,5 @@
     ];
   }
 
-  TSD.ecomspec = { workbook, templateWorkbook, standardRows, EVENTS, ITEM_PARAMS, FUNNEL, CORE, GA4_STANDARD, exampleCode, parseInput, normalizeSession, readPush, audit, sheetRows, specFromCsv, parseCsv, LEVEL_TEXT };
+  TSD.ecomspec = { issueRows, STATUS_TEXT, siteFacts, siteExample, firedCode, ACTION, workbook, templateWorkbook, standardRows, EVENTS, ITEM_PARAMS, FUNNEL, CORE, GA4_STANDARD, exampleCode, parseInput, normalizeSession, readPush, audit, sheetRows, specFromCsv, parseCsv, LEVEL_TEXT };
 })(typeof globalThis !== 'undefined' ? globalThis : window);

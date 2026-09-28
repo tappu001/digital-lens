@@ -52,7 +52,10 @@
   function sheetXml(sh) {
     const lines = [];
     let r = 0;
-    const row = (cells, defStyle) => {
+    const row = (cellsOrRow, defStyle) => {
+      // a row is [cells] or { cells, ht } (ht = height in points, for multi-line code)
+      const cells = Array.isArray(cellsOrRow) ? cellsOrRow : cellsOrRow.cells;
+      const ht = Array.isArray(cellsOrRow) ? 0 : cellsOrRow.ht || 0;
       r++;
       const cs = cells.map((c, i) => {
         const cell = c && typeof c === 'object' && 'v' in c ? c : { v: c };
@@ -62,11 +65,12 @@
         if (typeof cell.v === 'number' && isFinite(cell.v)) return `<c r="${ref}" s="${st}"><v>${cell.v}</v></c>`;
         return `<c r="${ref}" s="${st}" t="inlineStr"><is><t xml:space="preserve">${xml(String(cell.v).slice(0, 32000))}</t></is></c>`;
       }).join('');
-      lines.push(`<row r="${r}">${cs}</row>`);
+      lines.push(`<row r="${r}"${ht ? ` ht="${Math.min(409, ht)}" customHeight="1"` : ''}>${cs}</row>`);
     };
     if (sh.title) row([{ v: sh.title, s: 'title' }]);
     if (sh.note) row([{ v: sh.note, s: 'muted' }]);
-    if (sh.title || sh.note) row([]);
+    (sh.pre || []).forEach((cells) => row(cells));
+    if (sh.title || sh.note || sh.pre) row([]);
     const headRow = r + 1;
     if (sh.header) row(sh.header, 'head');
     (sh.rows || []).forEach((cells) => row(cells));

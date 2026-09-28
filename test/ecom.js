@@ -97,4 +97,23 @@ if (process.env.XLSX_OUT) { fs.copyFileSync(path.join(dir, 'report.xlsx'), proce
 assert.ok(/dataLayer\.push\(\{ ecommerce: null \}\)/.test(E.exampleCode(E.EVENTS[10])));
 assert.ok(/"transaction_id": "T_12345"/.test(E.exampleCode(E.EVENTS.find((e) => e.name === 'purchase'))));
 
+// Plain-English fixes, the Issues sheet, and site-specific correct code
+const atcRows = ev('add_to_cart').rows;
+assert.ok(atcRows.find((r) => r.param === 'currency').fix.includes('"USD"'), 'currency fix names the right code');
+assert.ok(atcRows.find((r) => r.scope === 'Item 1' && r.param === 'price').fix.includes('number: 10'), 'price fix');
+assert.ok(atcRows.find((r) => r.param === 'value' && r.level === 'warn').fix.includes('Set value to 20'), 'value fix');
+const issues = E.issueRows(report);
+assert.ok(issues[0].severity === 'Error' && issues.some((x) => x.severity === 'Not fired' && x.event === 'view_item_list'));
+assert.ok(issues.every((x) => x.severity === 'Not fired' || x.fix), 'every error / warning has a fix');
+const site = E.normalizeSession([{ event: 'view_item', ecommerce: { currency: 'inr', value: '499', items: [{ item_id: 'WS-HS-R', item_name: 'Shackle', price: '499', quantity: '1', item_brand: 'Warrior' }] } }]);
+const good = E.siteExample(site, 'purchase');
+assert.ok(/"currency": "INR"/.test(good) && /"item_id": "WS-HS-R"/.test(good) && /"price": 499/.test(good) && /"quantity": 1/.test(good) && /"value": 499/.test(good), 'correct code uses the site values, fixed types');
+assert.ok(/"transaction_id": "<order ID>"/.test(good) && /"item_category": "<item_category>"/.test(good), 'unknown values are placeholders');
+assert.ok(/dataLayer\.push\(\{ ecommerce: null \}\)/.test(good));
+assert.ok(/"price": "499"/.test(E.firedCode(site, 'view_item')), 'fired code is what the site sent');
+assert.strictEqual(E.siteExample(site, 'select_item').match(/"item_id"/g).length, 1);
+const sheets = E.workbook(report, { site: 'shop.example', session });
+assert.deepStrictEqual(sheets.map((x) => x.name), ['Summary', 'Issues to fix', 'dataLayer code', 'All checks', 'GA4 standard']);
+assert.ok(sheets[2].rows.every((r) => r.ht > 0 && /dataLayer\.push/.test(r.cells[3].v)), 'code sheet rows have heights and correct code');
+
 console.log(`All Ecommerce Audit checks passed (${report.events.length} events, ${rows.length} sheet rows, report ${book.length} bytes).`);

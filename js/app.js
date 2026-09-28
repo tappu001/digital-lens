@@ -850,6 +850,8 @@
     $('#proxyUrl').value = settings.proxyUrl || '';
     $('#proxyUrl').placeholder = (window.TSD_CONFIG && window.TSD_CONFIG.proxyUrl) || 'https://your-worker.your-subdomain.workers.dev';
     $('#showListeners').checked = settings.showListeners;
+    $('#googleClientId').value = settings.googleClientId || '';
+    $('#googleClientId').placeholder = (window.TSD_CONFIG && window.TSD_CONFIG.googleClientId) || '1234567890-abc123.apps.googleusercontent.com';
     $('#proxyResult').textContent = '';
     $('#clearSnaps').textContent = `Clear saved snapshots (${TSD.snapshots.count()})`;
     settingsDialog.showModal();
@@ -878,6 +880,7 @@
       style: (settingsDialog.querySelector('input[name="style"]:checked') || {}).value || 'spy',
       proxyUrl: $('#proxyUrl').value.trim(),
       showListeners: $('#showListeners').checked,
+      googleClientId: $('#googleClientId').value.trim(),
     });
     if (settings.proxyUrl !== prevProxy) refreshBackend();
     render();

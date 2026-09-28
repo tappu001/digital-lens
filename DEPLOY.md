@@ -155,3 +155,22 @@ Frontend changes do not require a Cloudflare redeployment.
 ## 9. Important
 
 Keep the project files at the repository root. Do **not** put them inside a `tagscope-decoder/` or other nested folder, otherwise the Pages root will not find `index.html` and the relative CSS/JS paths will break.
+
+## Google Sheets export (Ecommerce Audit)
+
+"Export to Google Sheets" creates the audit as a real Google Sheet in the user's own Google Drive.
+It signs in with Google and asks only for the `drive.file` permission (Digital Lens can see only the
+files it creates). It needs a Google OAuth Client ID, created once:
+
+1. Open https://console.cloud.google.com/ → create a project (e.g. "Digital Lens").
+2. **APIs & Services → Library** → enable **Google Drive API**.
+3. **APIs & Services → OAuth consent screen** → User type **External** → app name "Digital Lens",
+   your email → Scopes: add `.../auth/drive.file` → save. Then **Publish app** (drive.file is a
+   non-sensitive scope, so no Google review is needed). While in "Testing", only the test users
+   you add can sign in.
+4. **APIs & Services → Credentials → Create credentials → OAuth client ID** → type **Web application**
+   → Authorised JavaScript origins: `https://tappu001.github.io` (and `http://localhost:3000` for local use)
+   → Create, and copy the Client ID (`…apps.googleusercontent.com`).
+5. Paste it into `js/config.js` → `googleClientId`, or in Digital Lens → Settings ⚙ → Google Sheets export.
+
+Without a Client ID, Export downloads the `.xlsx` and explains how to open it in Google Sheets.
