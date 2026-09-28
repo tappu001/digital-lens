@@ -191,5 +191,8 @@
     if (m && (!S.session || S.loadedId !== m[1])) { S.loadedId = m[1]; S.waiting = 'get'; setTimeout(() => ask({ type: 'get' }), 150); }
   }
 
+  // Tells the Digital Lens Recorder that this page has Ecommerce Audit (it returns here to open reports).
+  if (root.document && document.documentElement) document.documentElement.setAttribute('data-dl-ecom', '1');
+
   TSD.ecomAudit = { render, _state: S, load };
 })(typeof globalThis !== 'undefined' ? globalThis : window);

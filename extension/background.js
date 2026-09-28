@@ -1,5 +1,6 @@
 // Digital Lens Recorder: keeps the recording (dataLayer pushes per page + GA4 hits) of one tab,
 // and hands the finished recording to Digital Lens → Ecommerce Audit.
+// Where "Finish & open report" goes when no Digital Lens page with Ecommerce Audit has been opened yet.
 const LIVE = 'https://tappu001.github.io/digital-lens/app.html';
 const MAX_PUSHES = 4000;
 const MAX_HITS = 2000;
