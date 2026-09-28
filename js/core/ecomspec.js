@@ -1,0 +1,403 @@
+// Ecommerce Audit: the GA4 ecommerce dataLayer standard, and a checker that compares recorded
+// dataLayer pushes (and, from the Digital Lens Recorder, the GA4 hits that were sent) with it.
+//
+// Standard: Google's GA4 recommended ecommerce events, with parameters inside the `ecommerce`
+// object, as in Google's "Measure ecommerce" guide for Google Tag Manager.
+(function (root) {
+  const TSD = (root.TSD = root.TSD || {});
+
+  // ---------- the standard ----------
+  // req: 'Required' | 'Recommended' | 'Optional'
+  const E = (name, label, step, params, itemsReq, example) => ({ name, label, step, params, itemsReq, example });
+  const p = (name, req, type, desc, example) => ({ name, req, type, desc, example });
+  const CURRENCY = p('currency', 'Required', 'Text (ISO 4217)', 'Currency of value and prices, 3 capital letters.', 'USD');
+  const VALUE = p('value', 'Required', 'Number', 'Total monetary value: sum of price × quantity of the items.', 30.03);
+  const ITEMS = p('items', 'Required', 'Array of items', 'The products in this event (at least one).', '[{…}]');
+  const LIST = [p('item_list_id', 'Recommended', 'Text', 'ID of the list the products are shown in.', 'related_products'), p('item_list_name', 'Recommended', 'Text', 'Name of the list.', 'Related products')];
+  const PROMO = [p('creative_name', 'Optional', 'Text', 'Name of the promotional creative.', 'summer_banner2'), p('creative_slot', 'Optional', 'Text', 'Slot of the creative.', 'featured_app_1'),
+    p('promotion_id', 'Recommended', 'Text', 'ID of the promotion.', 'P_12345'), p('promotion_name', 'Recommended', 'Text', 'Name of the promotion.', 'Summer Sale')];
+
+  const EVENTS = [
+    E('view_item_list', 'Product list viewed', 'Browse', [...LIST, ITEMS], 'Required'),
+    E('select_item', 'Product clicked in a list', 'Browse', [...LIST, ITEMS], 'Required'),
+    E('view_item', 'Product page viewed', 'Product', [CURRENCY, VALUE, ITEMS], 'Required'),
+    E('add_to_wishlist', 'Added to wishlist', 'Product', [CURRENCY, VALUE, ITEMS], 'Required'),
+    E('add_to_cart', 'Added to cart', 'Cart', [CURRENCY, VALUE, ITEMS], 'Required'),
+    E('remove_from_cart', 'Removed from cart', 'Cart', [CURRENCY, VALUE, ITEMS], 'Required'),
+    E('view_cart', 'Cart viewed', 'Cart', [CURRENCY, VALUE, ITEMS], 'Required'),
+    E('begin_checkout', 'Checkout started', 'Checkout', [CURRENCY, VALUE, p('coupon', 'Optional', 'Text', 'Order-level coupon code.', 'SUMMER_FUN'), ITEMS], 'Required'),
+    E('add_shipping_info', 'Shipping info added', 'Checkout', [CURRENCY, VALUE, p('coupon', 'Optional', 'Text', 'Order-level coupon code.', 'SUMMER_FUN'), p('shipping_tier', 'Recommended', 'Text', 'Shipping option chosen.', 'Ground'), ITEMS], 'Required'),
+    E('add_payment_info', 'Payment info added', 'Checkout', [CURRENCY, VALUE, p('coupon', 'Optional', 'Text', 'Order-level coupon code.', 'SUMMER_FUN'), p('payment_type', 'Recommended', 'Text', 'Payment method chosen.', 'Credit Card'), ITEMS], 'Required'),
+    E('purchase', 'Purchase', 'Purchase', [
+      p('transaction_id', 'Required', 'Text', 'Unique order ID; prevents duplicate purchases.', 'T_12345'), CURRENCY, VALUE,
+      p('tax', 'Recommended', 'Number', 'Tax amount of the order.', 4.9), p('shipping', 'Recommended', 'Number', 'Shipping cost of the order.', 5.99),
+      p('coupon', 'Optional', 'Text', 'Order-level coupon code.', 'SUMMER_FUN'), ITEMS], 'Required'),
+    E('refund', 'Refund', 'Purchase', [p('transaction_id', 'Required', 'Text', 'Order ID being refunded.', 'T_12345'), CURRENCY, VALUE,
+      p('tax', 'Optional', 'Number', 'Tax refunded.', 4.9), p('shipping', 'Optional', 'Number', 'Shipping refunded.', 5.99), p('items', 'Optional', 'Array of items', 'Items refunded (leave out for a full refund).', '[{…}]')], 'Optional'),
+    E('view_promotion', 'Promotion viewed', 'Promotion', [...PROMO, ITEMS], 'Required'),
+    E('select_promotion', 'Promotion clicked', 'Promotion', [...PROMO, ITEMS], 'Required'),
+  ];
+  const FUNNEL = ['view_item_list', 'select_item', 'view_item', 'add_to_cart', 'view_cart', 'begin_checkout', 'add_shipping_info', 'add_payment_info', 'purchase'];
+  const CORE = ['view_item', 'add_to_cart', 'begin_checkout', 'purchase'];
+
+  const ITEM_PARAMS = [
+    p('item_id', 'Required*', 'Text', 'Product ID / SKU. *item_id or item_name is required.', 'SKU_12345'),
+    p('item_name', 'Required*', 'Text', 'Product name. *item_id or item_name is required.', 'Stan and Friends Tee'),
+    p('price', 'Recommended', 'Number', 'Unit price after discount.', 10.01),
+    p('quantity', 'Recommended', 'Whole number', 'Number of units (defaults to 1).', 3),
+    p('item_brand', 'Recommended', 'Text', 'Brand.', 'Google'),
+    p('item_category', 'Recommended', 'Text', 'Main category.', 'Apparel'),
+    p('item_category2', 'Optional', 'Text', 'Second category level.', 'Adult'),
+    p('item_category3', 'Optional', 'Text', 'Third category level.', 'Shirts'),
+    p('item_category4', 'Optional', 'Text', 'Fourth category level.', 'Crew'),
+    p('item_category5', 'Optional', 'Text', 'Fifth category level.', 'Short sleeve'),
+    p('item_variant', 'Recommended', 'Text', 'Variant (colour, size…).', 'green'),
+    p('discount', 'Optional', 'Number', 'Unit discount.', 2.22),
+    p('coupon', 'Optional', 'Text', 'Item-level coupon.', 'SUMMER_FUN'),
+    p('affiliation', 'Optional', 'Text', 'Store or supplier.', 'Google Merchandise Store'),
+    p('index', 'Optional', 'Whole number', 'Position in the list.', 0),
+    p('item_list_id', 'Optional', 'Text', 'List the item was shown in.', 'related_products'),
+    p('item_list_name', 'Optional', 'Text', 'Name of that list.', 'Related Products'),
+    p('location_id', 'Optional', 'Text', 'Physical store location (Google Place ID).', 'ChIJIQBpAG2ahYAR_6128GcTUEo'),
+  ];
+  const EXAMPLE_ITEM = { item_id: 'SKU_12345', item_name: 'Stan and Friends Tee', affiliation: 'Google Merchandise Store', coupon: 'SUMMER_FUN', discount: 2.22, index: 0, item_brand: 'Google', item_category: 'Apparel', item_category2: 'Adult', item_category3: 'Shirts', item_category4: 'Crew', item_category5: 'Short sleeve', item_list_id: 'related_products', item_list_name: 'Related Products', item_variant: 'green', location_id: 'ChIJIQBpAG2ahYAR_6128GcTUEo', price: 10.01, quantity: 3 };
+
+  function exampleCode(ev) {
+    const eco = {};
+    ev.params.forEach((x) => {
+      if (x.name === 'items') eco.items = [ev.name.includes('promotion') ? { ...EXAMPLE_ITEM, promotion_id: 'P_12345', promotion_name: 'Summer Sale' } : EXAMPLE_ITEM];
+      else if (x.name === 'value') eco.value = 30.03;
+      else eco[x.name] = x.example;
+    });
+    return `dataLayer.push({ ecommerce: null });  // Clear the previous ecommerce object.\ndataLayer.push(${JSON.stringify({ event: ev.name, ecommerce: eco }, null, 2)});`;
+  }
+
+  // Custom standard from a CSV with the columns of the template's "Standard" sheet:
+  // Event, Parameter, Level (Event / Item), Requirement (Required / Recommended / Optional), Type
+  function parseCsv(text) {
+    const rows = []; let row = []; let cell = ''; let q = false;
+    const s = String(text || '').replace(/^﻿/, '');
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      if (q) { if (c === '"') { if (s[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += c; continue; }
+      if (c === '"') q = true;
+      else if (c === ',' || c === ';' || c === '\t') { row.push(cell); cell = ''; }
+      else if (c === '\n' || c === '\r') { if (c === '\r' && s[i + 1] === '\n') i++; row.push(cell); rows.push(row); row = []; cell = ''; }
+      else cell += c;
+    }
+    if (cell || row.length) { row.push(cell); rows.push(row); }
+    return rows.filter((r) => r.some((x) => x.trim()));
+  }
+  function specFromCsv(text) {
+    const rows = parseCsv(text);
+    if (!rows.length) throw new Error('The file is empty.');
+    const head = rows[0].map((h) => h.trim().toLowerCase());
+    const col = (...names) => head.findIndex((h) => names.includes(h));
+    const ci = { ev: col('event', 'event name'), par: col('parameter', 'parameter name', 'param'), lvl: col('level', 'scope'), req: col('requirement', 'required', 'status'), type: col('type', 'data type') };
+    if (ci.ev < 0 || ci.par < 0) throw new Error('The CSV needs at least the columns "Event" and "Parameter" (as in the template\'s Standard sheet).');
+    const events = {}; const items = {};
+    rows.slice(1).forEach((r) => {
+      const ev = (r[ci.ev] || '').trim(); const par = (r[ci.par] || '').trim();
+      if (!ev || !par) return;
+      const level = ci.lvl >= 0 && /item/i.test(r[ci.lvl] || '') ? 'item' : 'event';
+      const reqRaw = ci.req >= 0 ? (r[ci.req] || '').trim() : 'Required';
+      const req = /^req.*\*/i.test(reqRaw) ? 'Required*' : /^req/i.test(reqRaw) ? 'Required' : /^rec/i.test(reqRaw) ? 'Recommended' : /^opt/i.test(reqRaw) ? 'Optional' : 'Required';
+      const type = ci.type >= 0 ? (r[ci.type] || '').trim() : '';
+      if (ev === '*') { if (level === 'item') items[par] = p(par, req, type || 'Text', '', ''); return; }
+      const e = events[ev] || (events[ev] = { name: ev, label: ev, step: '', params: [], itemsReq: 'Optional', itemParams: [] });
+      if (level === 'item') e.itemParams.push(p(par, req, type || 'Text', '', ''));
+      else { e.params.push(p(par, req, type || (par === 'items' ? 'Array of items' : 'Text'), '', '')); if (par === 'items') e.itemsReq = req; }
+    });
+    const list = Object.values(events);
+    if (!list.length) throw new Error('No Event / Parameter rows were found.');
+    // "*" item parameters apply to every event that has items (the event's own item rows win).
+    list.forEach((e) => {
+      if (!e.params.some((x) => x.name === 'items')) return;
+      const own = new Set(e.itemParams.map((x) => x.name));
+      e.itemParams = [...Object.values(items).filter((x) => !own.has(x.name)), ...e.itemParams];
+    });
+    return { name: 'Custom standard', events: list, custom: true };
+  }
+  const GA4_STANDARD = { name: 'GA4 ecommerce standard', events: EVENTS, custom: false };
+
+  // ---------- reading recorded data ----------
+  // Accepts: a dataLayer array (copy(dataLayer)), a Digital Lens Recorder session, or JS-literal text.
+  function parseInput(text) {
+    const src = String(text || '').trim();
+    if (!src) throw new Error('Paste a dataLayer or load a recording first.');
+    let data;
+    try { data = JSON.parse(src); } catch (e) {
+      const at = src.search(/[[{]/);
+      if (at < 0 || !TSD.sitescan) throw new Error('This is not a dataLayer. Paste the output of copy(dataLayer) from the browser console.');
+      data = TSD.sitescan.parseJsLiteral(src, at).value;
+    }
+    return normalizeSession(data);
+  }
+  function normalizeSession(data) {
+    if (Array.isArray(data)) return { source: 'Pasted dataLayer', pages: [{ url: '', pushes: data.map((d, i) => ({ i, data: d })) }], hits: [], hitsCaptured: false };
+    if (data && data.app === 'digital-lens-recorder') {
+      return {
+        source: 'Digital Lens Recorder', startedAt: data.startedAt, site: data.site || '',
+        pages: (data.pages || []).map((pg) => ({ url: pg.url || '', title: pg.title || '', pushes: (pg.pushes || []).map((x, i) => ({ i, t: x.t, data: x.data })) })),
+        hits: data.hits || [], hitsCaptured: true,
+      };
+    }
+    if (data && typeof data === 'object' && data.dataLayer) return normalizeSession(data.dataLayer);
+    throw new Error('Unrecognised format. Paste the output of copy(dataLayer) or a Digital Lens recording.');
+  }
+
+  // A push → {event, params, where: 'ecommerce' | 'top' | 'gtag', ua}
+  const UA_KEYS = ['impressions', 'detail', 'add', 'remove', 'checkout', 'checkout_option', 'purchase', 'refund', 'click', 'promoView', 'promoClick'];
+  function readPush(d) {
+    if (!d || typeof d !== 'object') return null;
+    // gtag('event', name, params) copied as {"0":"event","1":"add_to_cart","2":{…}}
+    if (d[0] === 'event' && typeof d[1] === 'string') return { event: d[1], params: d[2] && typeof d[2] === 'object' ? d[2] : {}, where: 'gtag' };
+    if (d.ecommerce === null && !d.event) return { clear: true };
+    const ev = typeof d.event === 'string' ? d.event : '';
+    const eco = d.ecommerce && typeof d.ecommerce === 'object' ? d.ecommerce : null;
+    if (eco && UA_KEYS.some((k) => eco[k])) return { event: ev || '(no event)', params: eco, where: 'ecommerce', ua: UA_KEYS.filter((k) => eco[k]) };
+    if (eco) return { event: ev || '(no event)', params: eco, where: 'ecommerce' };
+    if (ev) {
+      const { event, 'gtm.uniqueEventId': u, ...rest } = d; void event; void u;
+      return { event: ev, params: rest, where: 'top' };
+    }
+    return null;
+  }
+
+  // ---------- checks ----------
+  const isNum = (v) => typeof v === 'number' && isFinite(v);
+  const numLike = (v) => typeof v === 'string' && v.trim() !== '' && isFinite(Number(v));
+  const show = (v) => (v === undefined ? '' : v === null ? 'null' : typeof v === 'object' ? (Array.isArray(v) ? `[${v.length} item${v.length === 1 ? '' : 's'}]` : JSON.stringify(v).slice(0, 120)) : typeof v === 'string' ? `"${v}"` : String(v));
+  const round2 = (n) => Math.round(n * 100) / 100;
+
+  function checkType(par, v) {
+    const t = (par.type || '').toLowerCase();
+    if (v === undefined || v === null || v === '') return null;
+    if (/whole/.test(t)) {
+      if (isNum(v) && Number.isInteger(v)) return null;
+      if (numLike(v)) return { level: 'warn', comment: `Sent as text (${show(v)}). Send a whole number without quotes.` };
+      return { level: 'error', comment: `Must be a whole number, got ${show(v)}.` };
+    }
+    if (/number/.test(t)) {
+      if (isNum(v)) return null;
+      if (numLike(v)) return { level: 'warn', comment: `Sent as text (${show(v)}). Send a number without quotes, e.g. ${Number(v)}.` };
+      return { level: 'error', comment: `Must be a number, got ${show(v)}.` };
+    }
+    if (/iso 4217/.test(t)) return typeof v === 'string' && /^[A-Z]{3}$/.test(v) ? null : { level: 'error', comment: `Must be a 3-letter currency code in capitals (e.g. USD, INR), got ${show(v)}.` };
+    if (/array/.test(t)) return Array.isArray(v) ? (v.length ? null : { level: 'error', comment: 'The items array is empty.' }) : { level: 'error', comment: `Must be an array of items, got ${show(v)}.` };
+    return null;
+  }
+  const missingLevel = (req) => (/^required/i.test(req) ? 'error' : /^recommended/i.test(req) ? 'warn' : 'info');
+  const missingComment = (par) => (/^required/i.test(par.req) ? `Missing required parameter "${par.name}".` : /^recommended/i.test(par.req) ? `Recommended parameter "${par.name}" is not sent.` : `Optional parameter "${par.name}" is not sent.`);
+
+  function checkOccurrence(spec, evSpec, occ, ctx) {
+    const res = [];
+    const P = occ.params || {};
+    const add = (r) => res.push({ event: evSpec.name, occurrence: occ.n, page: occ.page, ...r });
+    if (occ.ua) add({ scope: 'Event', param: 'ecommerce', req: 'Required', expected: 'GA4 format: ecommerce.items', actual: `ecommerce.${occ.ua.join(', ecommerce.')}`, level: 'error', comment: 'Universal Analytics (legacy) ecommerce format. GA4 needs ecommerce.items with GA4 parameter names.' });
+    if (occ.where === 'top') add({ scope: 'Event', param: 'ecommerce', req: 'Required', expected: 'Parameters inside "ecommerce"', actual: 'Parameters at the top level', level: 'warn', comment: 'Parameters are not inside the ecommerce object. GA4 ecommerce in GTM ("Send ecommerce data") reads only dataLayer.ecommerce.' });
+    if (occ.where === 'gtag') add({ scope: 'Event', param: '(format)', req: 'Info', expected: 'dataLayer.push', actual: 'gtag("event")', level: 'info', comment: 'Sent with gtag() instead of a dataLayer push. Fine for gtag.js sites; GTM ecommerce variables will not see it.' });
+    if (!occ.cleared && ctx.ecomCount > 1) add({ scope: 'Event', param: 'ecommerce: null', req: 'Recommended', expected: 'dataLayer.push({ ecommerce: null }) before this push', actual: 'Not cleared', level: 'warn', comment: 'The previous ecommerce object was not cleared, so values from earlier events can leak into this one.' });
+
+    const names = new Set();
+    evSpec.params.forEach((par) => {
+      names.add(par.name);
+      const v = P[par.name];
+      if (v === undefined || v === null || v === '') {
+        if (par.name === 'value' && ['view_item_list', 'select_item'].includes(evSpec.name)) return;
+        add({ scope: 'Event', param: par.name, req: par.req, expected: `${par.type}${par.example !== undefined && par.example !== '' ? ` · e.g. ${typeof par.example === 'string' ? par.example : JSON.stringify(par.example)}` : ''}`, actual: '(not sent)', level: missingLevel(par.req), comment: missingComment(par) });
+        return;
+      }
+      const t = checkType(par, v);
+      add({ scope: 'Event', param: par.name, req: par.req, expected: par.type, actual: show(v), level: t ? t.level : 'ok', comment: t ? t.comment : '' });
+    });
+
+    // value ≈ Σ price × quantity
+    const items = Array.isArray(P.items) ? P.items : [];
+    if (P.value !== undefined && items.length && items.every((it) => it && (isNum(it.price) || numLike(it.price)))) {
+      const sum = round2(items.reduce((n, it) => n + Number(it.price) * (it.quantity === undefined ? 1 : Number(it.quantity) || 0), 0));
+      const val = Number(P.value);
+      if (isFinite(val) && Math.abs(sum - val) > 0.01 + 0.005 * Math.abs(sum)) {
+        const extra = evSpec.name === 'purchase' && isFinite(Number(P.shipping) + Number(P.tax)) && Math.abs(round2(sum + (Number(P.shipping) || 0) + (Number(P.tax) || 0)) - val) <= 0.01 ? ' It equals items + shipping + tax: GA4 expects value without shipping and tax.' : '';
+        add({ scope: 'Event', param: 'value', req: 'Check', expected: `Σ price × quantity = ${sum}`, actual: show(P.value), level: 'warn', comment: `value does not match the items total (${sum}).${extra}` });
+      }
+    }
+    if (P.value !== undefined && P.currency === undefined && !evSpec.params.some((x) => x.name === 'currency')) {
+      add({ scope: 'Event', param: 'currency', req: 'Required', expected: 'Text (ISO 4217)', actual: '(not sent)', level: 'error', comment: 'value is sent without currency; GA4 ignores revenue without a currency.' });
+    }
+
+    // items
+    const itemSpec = evSpec.itemParams && evSpec.itemParams.length ? evSpec.itemParams : spec.custom ? [] : ITEM_PARAMS;
+    items.forEach((it, idx) => {
+      const scope = `Item ${idx + 1}`;
+      if (!it || typeof it !== 'object') { add({ scope, param: '(item)', req: 'Required', expected: 'Object', actual: show(it), level: 'error', comment: 'Item is not an object.' }); return; }
+      const either = itemSpec.filter((x) => x.req === 'Required*').map((x) => x.name);
+      if (either.length && !either.some((n) => it[n] !== undefined && it[n] !== null && it[n] !== '')) add({ scope, param: either.join(' / '), req: 'Required', expected: either.join(' or '), actual: '(not sent)', level: 'error', comment: `Each item needs ${either.join(' or ')}.` });
+      itemSpec.forEach((par) => {
+        const v = it[par.name];
+        if (v === undefined || v === null || v === '') {
+          if (par.req === 'Required*') return;
+          if (/^optional/i.test(par.req) && !spec.custom) return;
+          add({ scope, param: par.name, req: par.req, expected: par.type, actual: '(not sent)', level: missingLevel(par.req), comment: missingComment(par) });
+          return;
+        }
+        const t = checkType(par, v);
+        if (t || /^required|^recommended/i.test(par.req) || spec.custom) add({ scope, param: par.name, req: par.req, expected: par.type, actual: show(v), level: t ? t.level : 'ok', comment: t ? t.comment : '' });
+      });
+      if (it.quantity !== undefined && isNum(Number(it.quantity)) && Number(it.quantity) <= 0) add({ scope, param: 'quantity', req: 'Check', expected: '1 or more', actual: show(it.quantity), level: 'error', comment: 'quantity must be 1 or more.' });
+      if (it.price !== undefined && Number(it.price) < 0) add({ scope, param: 'price', req: 'Check', expected: '0 or more', actual: show(it.price), level: 'error', comment: 'price is negative.' });
+    });
+    if (['select_item'].includes(evSpec.name) && items.length > 1) add({ scope: 'Event', param: 'items', req: 'Check', expected: '1 item', actual: `${items.length} items`, level: 'warn', comment: 'select_item should contain only the selected item.' });
+
+    // extra parameters not in the standard
+    const extras = Object.keys(P).filter((k) => !names.has(k) && !['items', 'ecommerce', 'event', 'gtm.uniqueEventId', 'event_callback', 'event_timeout', 'eventModel', 'send_to'].includes(k));
+    if (extras.length) add({ scope: 'Event', param: extras.join(', '), req: 'Not in standard', expected: '—', actual: extras.map((k) => `${k}: ${show(P[k])}`).join('; ').slice(0, 200), level: 'info', comment: 'Extra parameters that the standard does not define (fine if intended, e.g. for other platforms).' });
+    return res;
+  }
+
+  function audit(session, spec = GA4_STANDARD) {
+    const occs = [];
+    let lastCleared = true; let ecomCount = 0;
+    session.pages.forEach((pg, pi) => {
+      pg.pushes.forEach((push) => {
+        const r = readPush(push.data);
+        if (!r) return;
+        if (r.clear) { lastCleared = true; return; }
+        const known = spec.events.find((e) => e.name === r.event);
+        if (!known && !r.ua && r.where !== 'ecommerce') return; // not an ecommerce event (gtm.js, page_view, custom events…)
+        if (r.where === 'ecommerce' || r.ua) ecomCount++;
+        occs.push({ ...r, page: pg.url, pageIndex: pi, t: push.t, cleared: r.where === 'ecommerce' ? lastCleared : true, n: occs.filter((o) => o.event === r.event).length + 1 });
+        if (r.where === 'ecommerce') lastCleared = false;
+      });
+    });
+
+    const hitsBy = {};
+    (session.hits || []).forEach((h) => { (hitsBy[h.en] || (hitsBy[h.en] = [])).push(h); });
+
+    const events = spec.events.map((evSpec) => {
+      const mine = occs.filter((o) => o.event === evSpec.name);
+      const rows = [];
+      mine.forEach((occ) => rows.push(...checkOccurrence(spec, evSpec, occ, { ecomCount })));
+      if (evSpec.name === 'purchase') {
+        const ids = mine.map((o) => o.params && o.params.transaction_id).filter(Boolean);
+        const dup = ids.filter((x, i) => ids.indexOf(x) !== i);
+        if (dup.length) rows.push({ event: 'purchase', occurrence: 2, page: '', scope: 'Event', param: 'transaction_id', req: 'Check', expected: 'Unique per order', actual: [...new Set(dup)].join(', '), level: 'error', comment: 'The same transaction_id was pushed more than once: purchases will be double counted unless GA4 deduplicates them.' });
+      }
+      let hit = null;
+      if (session.hitsCaptured && mine.length) {
+        const sent = (hitsBy[evSpec.name] || []).length;
+        hit = { sent };
+        if (!sent) rows.push({ event: evSpec.name, occurrence: 1, page: mine[0].page, scope: 'Event', param: '(GA4 hit)', req: 'Check', expected: 'A GA4 request with en=' + evSpec.name, actual: 'No GA4 request', level: 'error', comment: 'The dataLayer event was pushed but no GA4 hit was sent for it: check the GA4 event tag and its trigger in GTM.' });
+      }
+      const worst = rows.some((r) => r.level === 'error') ? 'error' : rows.some((r) => r.level === 'warn') ? 'warn' : mine.length ? 'ok' : 'missing';
+      return { name: evSpec.name, label: evSpec.label, step: evSpec.step, fired: mine.length, status: worst, rows, occurrences: mine, hit, core: CORE.includes(evSpec.name) };
+    });
+
+    // events pushed that the standard does not know but carry ecommerce data
+    const unknown = [...new Set(occs.filter((o) => !spec.events.some((e) => e.name === o.event)).map((o) => o.event))];
+    const hitsNoPush = session.hitsCaptured ? Object.keys(hitsBy).filter((en) => spec.events.some((e) => e.name === en) && !occs.some((o) => o.event === en)) : [];
+    const count = (s) => events.filter((e) => e.status === s).length;
+    const funnel = FUNNEL.filter((n) => spec.events.some((e) => e.name === n)).map((n) => events.find((e) => e.name === n));
+    const firstMissing = funnel.find((e) => !e.fired);
+    return {
+      spec: spec.name, source: session.source, pages: session.pages.length, pushes: session.pages.reduce((n, pg) => n + pg.pushes.length, 0),
+      hitsCaptured: session.hitsCaptured, hits: (session.hits || []).length,
+      events, unknown, hitsNoPush, funnel,
+      summary: {
+        expected: events.length, fired: events.filter((e) => e.fired).length, ok: count('ok'), warn: count('warn'), error: count('error'), missing: count('missing'),
+        coreMissing: events.filter((e) => e.core && !e.fired).map((e) => e.name),
+        firstMissing: firstMissing ? firstMissing.name : '',
+      },
+    };
+  }
+
+  const LEVEL_TEXT = { ok: 'OK', warn: 'Warning', error: 'Error', info: 'Info', missing: 'Not fired' };
+  // Rows of the "Event audit" sheet: one row per checked parameter, plus one row per event not fired.
+  function sheetRows(report) {
+    const out = [];
+    report.events.forEach((e) => {
+      if (!e.fired) {
+        out.push({ event: e.name, step: e.step, eventStatus: 'Not fired', occurrence: '', scope: 'Event', param: '—', req: '', expected: 'Event should fire', actual: '(not in recording)', result: 'Not fired', comment: e.core ? 'Core funnel event not seen in this recording. Trigger the action on the site; if it still does not fire, it is not implemented.' : 'Not seen in this recording (trigger the action on the site to test it).', page: '' });
+        return;
+      }
+      e.rows.forEach((r) => out.push({ event: e.name, step: e.step, eventStatus: LEVEL_TEXT[e.status], occurrence: r.occurrence, scope: r.scope, param: r.param, req: r.req, expected: r.expected, actual: r.actual, result: LEVEL_TEXT[r.level], comment: r.comment, page: r.page || '' }));
+    });
+    return out;
+  }
+
+  // ---------- workbook (Excel / Google Sheets) ----------
+  const RESULT_STYLE = { OK: 'ok', Warning: 'warn', Error: 'error', Info: 'info', 'Not fired': 'missing' };
+  function standardRows(spec) {
+    const rows = [];
+    spec.events.forEach((e) => e.params.forEach((x) => rows.push([e.name, e.step || '', 'Event', x.name, x.req, x.type, x.example === undefined ? '' : typeof x.example === 'string' ? x.example : JSON.stringify(x.example), x.desc || ''])));
+    const itemParams = spec.custom ? [] : ITEM_PARAMS;
+    itemParams.forEach((x) => rows.push(['*', 'All events with items', 'Item', x.name, x.req, x.type, typeof x.example === 'string' ? x.example : JSON.stringify(x.example), x.desc]));
+    spec.events.forEach((e) => (e.itemParams || []).forEach((x) => rows.push([e.name, e.step || '', 'Item', x.name, x.req, x.type, '', ''])));
+    return rows;
+  }
+  const STANDARD_SHEET = (spec) => ({
+    name: 'Standard dataLayer', widths: [20, 16, 8, 22, 14, 18, 28, 60],
+    header: ['Event', 'Funnel step', 'Level', 'Parameter', 'Requirement', 'Type', 'Example', 'Description'],
+    rows: standardRows(spec).map((r) => r.map((v, i) => (i === 0 || i === 3 ? { v, s: 'bold' } : v))),
+  });
+  const CODE_SHEET = (spec) => ({
+    name: 'dataLayer code', widths: [22, 110], header: ['Event', 'Standard dataLayer push (give this to developers)'],
+    rows: spec.events.map((e) => [{ v: e.name, s: 'bold' }, { v: spec.custom ? '' : exampleCode(e), s: 'code' }]),
+  });
+
+  function workbook(report, meta = {}) {
+    const spec = meta.spec || GA4_STANDARD;
+    const when = meta.date || new Date().toISOString().slice(0, 16).replace('T', ' ');
+    const s = report.summary;
+    const summaryRows = report.events.map((e) => {
+      const errors = e.rows.filter((r) => r.level === 'error').length;
+      const warns = e.rows.filter((r) => r.level === 'warn').length;
+      const main = (e.rows.find((r) => r.level === 'error') || e.rows.find((r) => r.level === 'warn') || {}).comment || (e.fired ? 'Matches the standard.' : 'Not seen in this recording.');
+      const status = LEVEL_TEXT[e.status];
+      return [{ v: e.name, s: 'bold' }, e.step, e.core ? 'Core' : '', e.fired, { v: status, s: RESULT_STYLE[status] }, report.hitsCaptured ? (e.fired ? (e.hit && e.hit.sent ? `Yes (${e.hit.sent})` : 'No') : '') : 'Not recorded', errors, warns, main];
+    });
+    return [
+      {
+        name: 'Summary', title: 'Digital Lens™ · Ecommerce dataLayer audit',
+        note: `Website: ${meta.site || report.site || '—'}   ·   Date: ${when}   ·   Standard: ${report.spec}   ·   Source: ${report.source}   ·   Pages: ${report.pages}   ·   dataLayer pushes: ${report.pushes}${report.hitsCaptured ? `   ·   GA4 hits: ${report.hits}` : ''}   ·   Events fired: ${s.fired}/${s.expected}   ·   OK ${s.ok} · Warnings ${s.warn} · Errors ${s.error} · Not fired ${s.missing}`,
+        widths: [20, 12, 7, 8, 11, 12, 8, 10, 80],
+        header: ['Event', 'Funnel step', 'Core', 'Fired', 'Status', 'GA4 hit sent', 'Errors', 'Warnings', 'Main finding'],
+        rows: summaryRows,
+      },
+      {
+        name: 'Event audit', widths: [18, 11, 11, 4, 9, 20, 14, 26, 30, 10, 60, 40],
+        header: ['Event', 'Funnel step', 'Event status', '#', 'Scope', 'Parameter', 'Requirement', 'Standard', 'Fired value', 'Result', 'Comment', 'Page URL'],
+        rows: sheetRows(report).map((r) => [{ v: r.event, s: 'bold' }, r.step, { v: r.eventStatus, s: RESULT_STYLE[r.eventStatus] }, r.occurrence, r.scope, r.param, r.req, r.expected, r.actual, { v: r.result, s: RESULT_STYLE[r.result] }, r.comment, r.page]),
+      },
+      STANDARD_SHEET(spec),
+      CODE_SHEET(spec),
+      {
+        name: 'Fired dataLayer', widths: [5, 40, 20, 90], header: ['#', 'Page URL', 'Event', 'dataLayer push'],
+        rows: (meta.session ? meta.session.pages : []).flatMap((pg) => pg.pushes.map((x) => [x.i + 1, pg.url, x.data && typeof x.data === 'object' ? (x.data.event || (x.data[0] === 'event' ? x.data[1] : '') || (x.data.ecommerce === null ? '(ecommerce: null)' : '')) : '', { v: JSON.stringify(x.data, null, 1).slice(0, 30000), s: 'code' }])),
+      },
+    ];
+  }
+  // Blank template: how to use it, the standard (editable, re-upload as CSV) and the code.
+  function templateWorkbook() {
+    const spec = GA4_STANDARD;
+    return [
+      {
+        name: 'How to use', title: 'Digital Lens™ · Ecommerce dataLayer audit template', widths: [110], freeze: false, filter: false,
+        rows: [
+          ['1. "Standard dataLayer" lists every GA4 ecommerce event and parameter. Edit it for a client (add, remove or change the Requirement), then File → Download → CSV.'],
+          ['2. In Digital Lens → Ecommerce Audit, choose "Custom standard" and upload that CSV. Use Event "*" with Level "Item" for item parameters that apply to every event.'],
+          ['3. Record the site with the Digital Lens Recorder (or paste copy(dataLayer)) and export the report: it fills the Summary and Event audit sheets automatically.'],
+          ['4. "dataLayer code" has the exact push for each event, ready to send to developers.'],
+          [''],
+          [{ v: 'Requirement values: Required (Error when missing) · Recommended (Warning) · Optional (not flagged).', s: 'muted' }],
+        ].map((r) => r.map((v) => (typeof v === 'string' ? { v } : v))),
+      },
+      { name: 'Summary', widths: [20, 12, 7, 8, 11, 12, 8, 10, 80], header: ['Event', 'Funnel step', 'Core', 'Fired', 'Status', 'GA4 hit sent', 'Errors', 'Warnings', 'Main finding'], rows: spec.events.map((e) => [{ v: e.name, s: 'bold' }, e.step, CORE.includes(e.name) ? 'Core' : '', '', '', '', '', '', '']) },
+      { name: 'Event audit', widths: [18, 11, 11, 4, 9, 20, 14, 26, 30, 10, 60, 40], header: ['Event', 'Funnel step', 'Event status', '#', 'Scope', 'Parameter', 'Requirement', 'Standard', 'Fired value', 'Result', 'Comment', 'Page URL'], rows: [] },
+      STANDARD_SHEET(spec),
+      CODE_SHEET(spec),
+    ];
+  }
+
+  TSD.ecomspec = { workbook, templateWorkbook, standardRows, EVENTS, ITEM_PARAMS, FUNNEL, CORE, GA4_STANDARD, exampleCode, parseInput, normalizeSession, readPush, audit, sheetRows, specFromCsv, parseCsv, LEVEL_TEXT };
+})(typeof globalThis !== 'undefined' ? globalThis : window);

@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Digital Lens Recorder",
+  "version": "1.0.0",
+  "description": "Records dataLayer pushes and GA4 hits while you browse a site, for Digital Lens™ Ecommerce Audit.",
+  "author": "Tapasvi Dudhrejiya",
+  "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "action": {
+    "default_title": "Digital Lens Recorder",
+    "default_popup": "popup.html",
+    "default_icon": { "16": "icons/icon16.png", "48": "icons/icon48.png" }
+  },
+  "background": { "service_worker": "background.js" },
+  "permissions": ["storage", "webRequest", "tabs"],
+  "host_permissions": ["<all_urls>"],
+  "content_scripts": [
+    { "matches": ["http://*/*", "https://*/*"], "js": ["hook.js"], "run_at": "document_start", "world": "MAIN" },
+    { "matches": ["http://*/*", "https://*/*"], "js": ["relay.js"], "run_at": "document_start" }
+  ]
+}
