@@ -37,7 +37,7 @@
       S.open = new Set(S.report.events.filter((ev) => ev.status === 'error' || ev.status === 'warn').map((ev) => ev.name));
     } catch (err) { S.error = err.message; S.report = null; }
     paint();
-    if (S.el) S.el.scrollIntoView({ block: 'start' });
+    window.scrollTo({ top: 0 });
   }
   const siteFrom = (session) => { const u = (session.pages.find((p) => p.url) || {}).url; try { return u ? new URL(u).hostname : ''; } catch (e) { return ''; } };
 
