@@ -1,7 +1,7 @@
 // App Inspector: live Android app analytics / ad events from the local Digital Lens suite.
 // The suite (mitmproxy + adb, see suite/README.md) serves this page on http://127.0.0.1:8088
 // and exposes /api/health, /api/events, /api/apps, /api/launch, /api/phone-proxy, /api/clear.
-// On the hosted site there is no suite, so the page shows setup steps and the download.
+// On the hosted site there is no suite, so the page shows a "coming soon" announcement.
 (function (root) {
   const TSD = (root.TSD = root.TSD || {});
   const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -13,8 +13,6 @@
   ];
   const COLOR = Object.fromEntries(PLATFORMS.map(([n, bg, fg]) => [n, { bg, fg }]));
   const SHORT = { 'Firebase / GA4': 'Firebase', 'GA4 (Measurement Protocol)': 'GA4 MP', 'Meta App Events': 'Meta', 'Connection blocked': 'Blocked' };
-  const DOWNLOAD = 'downloads/digital-lens-suite.zip';
-  const HELPER = 'http://127.0.0.1:8088';
   const DEV_MESSAGE = 'Hi, please send me a debug build of the app that trusts user-installed certificates (add <certificates src="user" /> in debug-overrides of the network security config). I need it to check our analytics events with Digital Lens. It does not affect the Play Store version.';
   const MAX_KEEP = 3000;
 
@@ -38,6 +36,7 @@
       if (!h || h.app !== 'digital-lens-suite') throw new Error('not the suite');
       S.mode = 'local';
       S.health = h;
+      document.documentElement.classList.add('ai-live');
       loadApps();
       poll();
       S.timers.push(setInterval(poll, 1000), setInterval(refreshHealth, 2000));
@@ -107,19 +106,26 @@
     return `<span class="ai-chip" style="background:${c.bg};color:${c.fg}">${esc(SHORT[p] || p)}</span>`;
   }
 
+  // The hosted site announces App Inspector as coming soon; the live tool runs from the local suite.
   function hostedView() {
-    return `<section class="ai-home">
+    const features = [
+      ['◉', 'Live event stream', 'Every analytics and advertising hit an app sends, decoded the moment it leaves the phone.'],
+      ['◈', 'Every parameter, readable', 'Event names, parameters, items and IDs laid out the way GA4 and each ad platform name them.'],
+      ['✓', 'One-click app check', 'Tells you straight away whether a build can be inspected, and what to ask the developers for if not.'],
+    ];
+    const platforms = ['Firebase / GA4', 'Meta App Events', 'Google Ads', 'TikTok', 'Snapchat', 'AppsFlyer', 'Adjust'];
+    return `<section class="ai-soon">
+      <div class="soon-badge"><span class="soon-dot"></span>Coming soon</div>
       <div class="module-kicker">APP INSPECTOR · ANDROID</div>
-      <h1>See every analytics and ad event your app sends.</h1>
-      <p class="lead">Like GTM Preview, for Android apps. Plug in a phone, open the app, and watch Firebase / GA4, Meta, Google Ads, TikTok, Snapchat, AppsFlyer and Adjust events arrive live with all their parameters.</p>
-      <div class="ai-cta"><a class="btn-primary big" href="${DOWNLOAD}" download>Download Digital Lens for Windows</a><a class="btn-outline big" href="${HELPER}/app.html#app">Already installed? Open App Inspector</a></div>
-      <p class="small muted">Also runs on macOS / Linux (<code>./start.sh</code>). If “Open App Inspector” shows “can't connect”, start it from the desktop icon first.</p>
-      <ol class="ai-steps">
-        <li><span class="n">1</span><div><b>Install once</b><p>Unzip the download and double-click <b>Install Digital Lens.bat</b>. It installs everything it needs (including Android's adb) and puts a <b>Digital Lens App Inspector</b> icon on your desktop.</p></div></li>
-        <li><span class="n">2</span><div><b>Every time: open the desktop icon</b><p>It opens App Inspector in your browser. No black window, no commands.</p></div></li>
-        <li><span class="n">3</span><div><b>Plug in your phone</b><p>With USB debugging on (Settings → About phone → tap Build number 7 times → Developer options → USB debugging). Tap <b>Allow</b> on the phone. Everything else is automatic, and App Inspector guides you through the one-time certificate step.</p></div></li>
-      </ol>
-      <div class="ai-note warn"><b>Good to know:</b> since Android 7, apps only allow this if their developers trust user certificates. Chrome and debug / QA builds work; most Play Store builds refuse. App Inspector's <b>Check this app</b> button tells you which, and gives you a message to send the developer.</div>
+      <h1>Mobile app tracking,<br><em>made visible.</em></h1>
+      <p class="soon-lead">GTM Preview, for Android apps. Connect a phone, open any test build, and watch its tracking events arrive live, with every parameter.</p>
+      <div class="soon-platforms">${platforms.map((p) => `<span>${esc(p)}</span>`).join('')}</div>
+      <div class="soon-grid">${features.map(([i, t, d]) => `<div class="soon-card"><span class="soon-icon">${i}</span><b>${t}</b><p>${d}</p></div>`).join('')}</div>
+      <div class="soon-cta">
+        <a class="btn-primary big" href="mailto:dudhrejiyatapasvi@gmail.com?subject=${encodeURIComponent('Digital Lens App Inspector: early access')}">Request early access</a>
+        <button type="button" class="btn-outline big" data-mode="gtm">Explore GTM Audit</button>
+      </div>
+      <p class="soon-foot">In private testing now. GTM Audit, GA4 Inspector and Website Insights are fully available today.</p>
     </section>`;
   }
   function stepsHtml() {
@@ -323,6 +329,11 @@
     if (a === 'copy-dev') { try { await navigator.clipboard.writeText(DEV_MESSAGE); act.textContent = 'Copied ✓'; } catch (e) { window.prompt('Copy this message:', DEV_MESSAGE); } }
     if (a === 'shutdown') { await api('/api/shutdown', 'POST').catch(() => {}); S.health = null; renderStatus(); }
   });
+
+  // Served by the local suite (plain http): hide the "Soon" labels everywhere.
+  if (root.location && root.location.protocol === 'http:' && root.fetch) {
+    api('/api/health').then((h) => { if (h && h.app === 'digital-lens-suite') document.documentElement.classList.add('ai-live'); }).catch(() => {});
+  }
 
   TSD.appInspector = { mount, unmount, _state: S, _visible: visible };
 })(typeof globalThis !== 'undefined' ? globalThis : window);
