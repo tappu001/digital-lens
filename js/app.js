@@ -140,12 +140,10 @@
   function setMode(mode, fromRoute) {
     state.mode = mode;
     state.view = mode === 'gtm' ? 'tags' : mode === 'website' ? 'scan' : 'tags';
-    document.querySelectorAll('.mode-tab').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
-    const form = $('#decodeForm');
+    document.querySelectorAll('.dl-nav a[data-mode]').forEach((a) => a.classList.toggle('active', a.dataset.mode === mode));
     const q = $('#q');
     const btn = $('#decodeBtn');
-    const showSearch = mode === 'gtm';
-    form.hidden = !showSearch;
+    $('#toolbar').hidden = mode !== 'gtm';
     if (mode === 'gtm') { q.placeholder = 'GTM-XXXXXXX or https://example.com'; btn.textContent = 'Audit GTM'; }
     if (mode === 'website') { q.placeholder = 'https://example.com'; btn.textContent = 'Scan website'; }
     notice('');
@@ -256,14 +254,14 @@
     return `<section class="workspace-home">
       <div class="hero-kicker">TRACKING AUDIT WORKSPACE</div>
       <h1>Audit the stack.<br><span>Not the noise.</span></h1>
-      <p class="hero-copy">Four independent workspaces. Inspect a published GTM container, the public Google tag configuration behind a GA4 Measurement ID, or what is actually installed on a website — without logging into anyone's analytics account.</p>
+      <p class="hero-copy">Pick a tool. Inspect a published GTM container, the public Google tag configuration behind a GA4 Measurement ID, or what is actually installed on a website — without logging into anyone's analytics account.</p>
       <div class="audit-grid">
         <button class="audit-card gtm" data-mode="gtm"><span class="audit-icon">◈</span><span class="audit-title">GTM Audit</span><span class="audit-desc">Open any published container and read its tags, triggers and variables with clean names, plus IDs by platform, weight and load time.</span><span class="audit-cta">Open GTM audit →</span></button>
         <button class="audit-card ga4" data-mode="ga4"><span class="audit-icon">◉</span><span class="audit-title">GA4 Inspector</span><span class="audit-desc">Enter a Measurement ID or website and see its GA4 setup: enhanced measurement, key events, create and modify events, domains, referrals and data collection.</span><span class="audit-cta">Inspect a Measurement ID →</span></button>
         <button class="audit-card app" data-mode="app"><span class="audit-icon">▣</span><span class="audit-title">App Inspector <span class="soon-pill">Coming soon</span></span><span class="audit-desc">Connect an Android phone over USB and watch Firebase / GA4, Meta, Google Ads, TikTok, Snapchat, AppsFlyer and Adjust events fire live, with every parameter.</span><span class="audit-cta">Preview what's coming →</span></button>
         <button class="audit-card web" data-mode="website"><span class="audit-icon">◌</span><span class="audit-title">Website Insights</span><span class="audit-desc">Scan a live website independently to identify platforms, pixels, analytics IDs, containers, scripts and tracking technologies.</span><span class="audit-cta">Scan a website →</span></button>
       </div>
-      <div class="principles"><div><b>Three surfaces.</b><span>No mixed dashboards.</span></div><div><b>Readable names.</b><span>Technical IDs stay secondary.</span></div><div><b>Evidence first.</b><span>Private data is marked "Not publicly exposed", never guessed.</span></div></div>
+      <div class="principles"><div><b>Separate tools.</b><span>No mixed dashboards.</span></div><div><b>Readable names.</b><span>Technical IDs stay secondary.</span></div><div><b>Evidence first.</b><span>Private data is marked "Not publicly exposed", never guessed.</span></div></div>
     </section>`;
   }
 
@@ -297,7 +295,8 @@
 
   function viewGA4() {
     const g = state.ga4;
-    const search = `<div class="g-card g-search"><div class="g-search-title">Analyze a GA4 property</div><div class="g-search-sub">Enter a Measurement ID (G-XXXXXXXXXX) or a website URL. No Google login required.</div>
+    const intro = g.report || g.loading ? '' : `<div class="g-intro"><div class="module-kicker">GA4 INSPECTOR</div><h1>See the setup behind any GA4 property.</h1><p>Enhanced measurement, key events, created and modified events, domains, referrals and linked products, read from the public Google tag.</p></div>`;
+    const search = `${intro}<div class="g-card g-search"><div class="g-search-title">Analyze a GA4 property</div><div class="g-search-sub">Enter a Measurement ID (G-XXXXXXXXXX) or a website URL. No Google login required.</div>
       <form id="ga4Form" class="g-search-row" autocomplete="off"><input id="ga4Input" placeholder="G-XXXXXXXXXX or https://example.com" value="${esc(g.input)}" spellcheck="false"><button class="btn-primary" type="submit">Inspect</button></form>
       ${g.error ? `<div class="notice error">${esc(g.error)}</div>` : ''}
       ${g.choices ? `<div class="g-choices"><div class="small muted">GA4 Measurement IDs found on ${esc(g.choices.url)}:</div>${g.choices.ids.length ? g.choices.ids.map((x) => `<button type="button" class="chip-btn" data-ga4-pick="${esc(x.id)}"><b>${esc(x.id)}</b><span>${esc(x.where.join(', '))}</span></button>`).join('') : '<div class="small">No GA4 Measurement ID was found in the page HTML or its GTM containers.</div>'}</div>` : ''}

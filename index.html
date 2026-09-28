@@ -10,23 +10,25 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/landing.css?v=20260928.1">
+  <link rel="stylesheet" href="assets/landing.css?v=20260928.2">
+  <link rel="stylesheet" href="assets/site.css?v=20260928.2">
 </head>
 <body>
-  <div class="noise"></div>
-  <header class="landing-nav">
-    <a class="mini-brand" href="./">
-      <img src="favicon.svg" alt="Digital Lens" width="34" height="34">
-      <span>Digital Lens<span class="tm">™</span></span>
-    </a>
-    <nav>
-      <a href="app.html#gtm">GTM Audit</a>
-      <a href="app.html#ga4">GA4 Inspector</a>
-      <a href="app.html#website">Website Insights</a>
-      <a href="app.html#app">App Inspector <span class="nav-soon">Soon</span></a>
-      <a href="#capabilities">Capabilities</a>
-      <a class="nav-cta" href="app.html#home">Open workspace <span>↗</span></a>
-    </nav>
+  <div class="dl-bg" aria-hidden="true"><i class="b1"></i><i class="b2"></i><i class="b3"></i><i class="scan"></i></div>
+  <header class="dl-header">
+    <div class="dl-header-in">
+      <a class="dl-brand" href="./" aria-label="Digital Lens™ home"><img src="favicon.svg" alt=""><span>Digital Lens<sup>™</sup></span></a>
+      <nav class="dl-nav" aria-label="Tools">
+        <a href="app.html#gtm">GTM Audit</a>
+        <a href="app.html#ga4">GA4 Inspector</a>
+        <a href="app.html#website">Website Insights</a>
+        <a href="app.html#app">App Inspector <span class="dl-soon">Soon</span></a>
+      </nav>
+      <div class="dl-actions">
+        <a class="dl-cta" href="app.html#home">Start an audit <span>→</span></a>
+        <button type="button" class="dl-icon dl-burger" aria-label="Menu" aria-expanded="false"><span></span></button>
+      </div>
+    </div>
   </header>
 
   <main>
@@ -84,11 +86,12 @@
     </section>
   </main>
 
-  <footer class="landing-footer">
-    <div class="footer-brand"><img src="favicon.svg" alt="" width="42" height="42"><div><strong>Digital Lens™</strong><span>See what matters.</span></div></div>
-    <div class="founder">Built by <strong>Tapasvi Dudhrejiya</strong><br><span>Digital measurement & tracking tools</span></div>
-    <div class="footer-links"><a href="mailto:dudhrejiyatapasvi@gmail.com">dudhrejiyatapasvi@gmail.com</a><a href="https://www.linkedin.com/in/tapasvi-dudhrejiya/" target="_blank" rel="noopener">LinkedIn ↗</a></div>
-  </footer>
+  <div class="dl-footer-wrap"><footer class="dl-footer">
+    <div class="fb"><img src="favicon.svg" alt=""><div><strong>Digital Lens™</strong><span>See what matters.</span></div></div>
+    <div class="fm">Built by <strong>Tapasvi Dudhrejiya</strong></div>
+    <div class="fl"><a href="mailto:dudhrejiyatapasvi@gmail.com">dudhrejiyatapasvi@gmail.com</a><a href="https://www.linkedin.com/in/tapasvi-dudhrejiya/" target="_blank" rel="noopener">LinkedIn ↗</a></div>
+  </footer></div>
+  <script src="js/header.js?v=20260928.2"></script>
   <script src="assets/landing.js"></script>
 </body>
 </html>

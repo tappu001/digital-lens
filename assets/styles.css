@@ -765,3 +765,34 @@ body { background: #f6f7f9; color: var(--ink); }
 .soon-cta .big { display: inline-flex; align-items: center; justify-content: center; height: 46px; padding: 0 22px; border-radius: 10px; font-weight: 600; font-size: 15px; text-decoration: none; }
 .soon-cta a.btn-primary { color: #fff; box-shadow: 0 8px 22px rgba(91, 79, 224, .25); }
 .soon-cta .btn-outline { background: #fff; }
+
+/* ===================================================================
+   Digital Lens 4 — shared header (assets/site.css), landing-page look
+   =================================================================== */
+:root { --font: Inter, system-ui, -apple-system, "Segoe UI", Arial, sans-serif; --appbar-h: 68px; --ink: #08152e; --blue: #1467f5; --blue-dark: #0f55d0; --blue-tint: #eaf2ff; --accent: #1467f5; --accent-2: #3d84f7; --accent-tint: #eaf2ff; }
+body { color: var(--ink); -webkit-font-smoothing: antialiased; }
+.main { padding-top: 8px; }
+.workspace-home h1, .module-home h1, .module-head h1, .gtm-home h1, .ai-home h1, .audit-title, .g-head-id { font-family: "Space Grotesk", var(--font); }
+.workspace-home h1 span, .ai-soon h1 em { background: linear-gradient(100deg, #1467f5, #11bfd5 45%, #6539ee); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.hero-kicker, .module-kicker { color: #1467f5; }
+.audit-card, .module-input-card, .principles, .soon-card, .g-card, .card, .tile, .sec, .way { border-color: #dce5f2; }
+.audit-card:hover { border-color: #b9d0f5; }
+.audit-cta { color: #1467f5; }
+.btn-primary:hover { background: #0f55d0; }
+.soon-badge { border-color: #cfe0fb; }
+.soon-dot { background: #1467f5; }
+
+.dl-toolbar { background: rgba(255, 255, 255, .55); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border-bottom: 1px solid rgba(203, 216, 235, .75); }
+.dl-toolbar-in { max-width: 1360px; margin: 0 auto; padding: 12px clamp(16px, 4vw, 48px); display: flex; align-items: center; gap: 10px; }
+.dl-toolbar .searchbar { max-width: none; background: #fff; border: 1px solid #dce5f2; border-radius: 12px; box-shadow: 0 6px 20px rgba(20, 103, 245, .06); }
+.dl-toolbar .searchbar:focus-within { border-color: #9dbff5; box-shadow: 0 0 0 4px rgba(20, 103, 245, .1); }
+.dl-toolbar .btn-primary { border-radius: 9px; height: 38px; }
+.dl-toolbar .backend-chip { height: 40px; border-radius: 10px; border-color: #dce5f2; background: rgba(255, 255, 255, .8); }
+.sidenav { background: rgba(255, 255, 255, .72); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border-right-color: #dce5f2; }
+@media (max-width: 700px) { .dl-toolbar .backend-chip .label { display: none; } .dl-toolbar .backend-chip { padding: 0 14px; } }
+:root { --shadow-1: 0 1px 2px rgba(8, 21, 46, .04), 0 8px 24px rgba(20, 60, 120, .06); --shadow-2: 0 2px 6px rgba(8, 21, 46, .06), 0 18px 40px rgba(20, 60, 120, .12); }
+.way, .card, .tile, .sec { border-radius: 14px; border: 1px solid #dce5f2; }
+.g-intro { margin: 32px 0 22px; }
+.g-intro h1 { font: 700 38px/1.08 "Space Grotesk", var(--font); letter-spacing: -.04em; margin: 0; }
+.g-intro p { color: #66748b; font-size: 15px; line-height: 1.55; max-width: 720px; margin: 12px 0 0; }
+@media (max-width: 620px) { .g-intro h1 { font-size: 30px; } }

@@ -16,44 +16,44 @@
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles.css?v=20260928.1">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/styles.css?v=20260928.2">
+  <link rel="stylesheet" href="assets/site.css?v=20260928.2">
 </head>
 <body>
   <!-- Google Tag Manager (noscript) -->
   <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-WR8MNJG8"
     height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   <!-- End Google Tag Manager (noscript) -->
-  <header class="appbar">
-    <a class="brand" href="./" aria-label="Digital Lens™ home">
-      <img src="favicon.svg" alt="" width="28" height="28">
-      <span class="brand-text">
-        <span class="brand-name">Digital Lens™</span>
-        <span class="brand-by">by Tapasvi Dudhrejiya</span>
-      </span>
-    </a>
-    <form id="decodeForm" class="searchbar" autocomplete="off" role="search">
-      <label for="q" class="sr-only">Audit input</label>
-      <svg class="searchbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.8l-.3-.3A6.5 6.5 0 1 0 9.5 16a6.5 6.5 0 0 0 4.2-1.6l.3.3v.8l5 5 1.5-1.5-5-5Zm-6 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9Z"/></svg>
-      <input id="q" type="text" spellcheck="false" placeholder="GTM-XXXXXXX or a published GTM script URL">
-      <button type="submit" id="decodeBtn" class="btn-primary">Decode</button>
-    </form>
-    <div class="appbar-actions">
-      <button type="button" id="backendChip" class="backend-chip" title="How this app fetches gtm.js">
-        <span class="dot"></span><span class="label">Checking…</span>
-      </button>
-      <button type="button" class="icon-btn" id="pasteBtn" title="Paste container code" aria-label="Paste container code"></button>
-      <button type="button" class="icon-btn" id="settingsBtn" title="Settings" aria-label="Settings"></button>
+  <div class="dl-bg" aria-hidden="true"><i class="b1"></i><i class="b2"></i><i class="b3"></i><i class="scan"></i></div>
+  <header class="dl-header">
+    <div class="dl-header-in">
+      <a class="dl-brand" href="./" aria-label="Digital Lens™ home"><img src="favicon.svg" alt=""><span>Digital Lens<sup>™</sup></span></a>
+      <nav class="dl-nav" aria-label="Tools">
+        <a href="app.html#gtm" data-mode="gtm">GTM Audit</a>
+        <a href="app.html#ga4" data-mode="ga4">GA4 Inspector</a>
+        <a href="app.html#website" data-mode="website">Website Insights</a>
+        <a href="app.html#app" data-mode="app">App Inspector <span class="dl-soon">Soon</span></a>
+      </nav>
+      <div class="dl-actions">
+        <button type="button" class="dl-icon" id="settingsBtn" title="Settings" aria-label="Settings"></button>
+        <button type="button" class="dl-icon dl-burger" aria-label="Menu" aria-expanded="false"><span></span></button>
+      </div>
     </div>
     <div class="progress" id="progress" hidden><span></span></div>
   </header>
 
-  <div class="modebar" id="modebar" aria-label="Audit modes">
-    <button type="button" class="mode-tab active" data-mode="home"><span>⌂</span>Workspace</button>
-    <button type="button" class="mode-tab" data-mode="gtm"><span>◈</span>GTM Audit</button>
-    <button type="button" class="mode-tab" data-mode="ga4"><span>◉</span>GA4 Inspector</button>
-    <button type="button" class="mode-tab" data-mode="website"><span>◌</span>Website Insights</button>
-    <button type="button" class="mode-tab" data-mode="app"><span>▣</span>App Inspector<i class="soon-pill">Soon</i></button>
+  <div class="dl-toolbar" id="toolbar" hidden>
+    <div class="dl-toolbar-in">
+      <form id="decodeForm" class="searchbar" autocomplete="off" role="search">
+        <label for="q" class="sr-only">GTM container or website</label>
+        <svg class="searchbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.8l-.3-.3A6.5 6.5 0 1 0 9.5 16a6.5 6.5 0 0 0 4.2-1.6l.3.3v.8l5 5 1.5-1.5-5-5Zm-6 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9Z"/></svg>
+        <input id="q" type="text" spellcheck="false" placeholder="GTM-XXXXXXX or a published GTM script URL">
+        <button type="submit" id="decodeBtn" class="btn-primary">Decode</button>
+      </form>
+      <button type="button" class="dl-icon" id="pasteBtn" title="Paste container code" aria-label="Paste container code"></button>
+      <button type="button" id="backendChip" class="backend-chip" title="How this app fetches gtm.js"><span class="dot"></span><span class="label">Checking…</span></button>
+    </div>
   </div>
 
   <div class="layout">
@@ -125,14 +125,11 @@
 
   <div id="report" class="report" aria-hidden="true"></div>
 
-  <footer class="site-footer">
-    <span>Digital Lens™ — built by <strong>Tapasvi Dudhrejiya</strong></span>
-    <span class="foot-links">
-      <a href="mailto:dudhrejiyatapasvi@gmail.com">dudhrejiyatapasvi@gmail.com</a>
-      <span class="foot-sep">·</span>
-      <a href="https://www.linkedin.com/in/tapasvi-dudhrejiya/" target="_blank" rel="noopener">LinkedIn</a>
-    </span>
-  </footer>
+  <div class="dl-footer-wrap"><footer class="dl-footer">
+    <div class="fb"><img src="favicon.svg" alt=""><div><strong>Digital Lens™</strong><span>See what matters.</span></div></div>
+    <div class="fm">Built by <strong>Tapasvi Dudhrejiya</strong></div>
+    <div class="fl"><a href="mailto:dudhrejiyatapasvi@gmail.com">dudhrejiyatapasvi@gmail.com</a><a href="https://www.linkedin.com/in/tapasvi-dudhrejiya/" target="_blank" rel="noopener">LinkedIn ↗</a></div>
+  </footer></div>
 
   <script src="js/config.js?v=20260925.1"></script>
   <script src="js/core/catalog.js?v=20260925.1"></script>
@@ -151,6 +148,7 @@
   <script src="js/icons.js?v=20260925.1"></script>
   <script src="js/analytics.js?v=20260925.1"></script>
   <script src="js/appinspector.js?v=20260928.1"></script>
-  <script src="js/app.js?v=20260928.1"></script>
+  <script src="js/header.js?v=20260928.2"></script>
+  <script src="js/app.js?v=20260928.2"></script>
 </body>
 </html>
