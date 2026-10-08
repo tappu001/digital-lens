@@ -447,15 +447,6 @@
     spec.events.forEach((e) => (e.itemParams || []).forEach((x) => rows.push([e.name, e.step || '', 'Item', x.name, x.req, x.type, '', ''])));
     return rows;
   }
-  const STANDARD_SHEET = (spec) => ({
-    name: 'Standard dataLayer', widths: [20, 16, 8, 22, 14, 18, 28, 60],
-    header: ['Event', 'Funnel step', 'Level', 'Parameter', 'Requirement', 'Type', 'Example', 'Description'],
-    rows: standardRows(spec).map((r) => r.map((v, i) => (i === 0 || i === 3 ? { v, s: 'bold' } : v))),
-  });
-  const CODE_SHEET = (spec) => ({
-    name: 'dataLayer code', widths: [22, 110], header: ['Event', 'Standard dataLayer push (give this to developers)'],
-    rows: spec.events.map((e) => [{ v: e.name, s: 'bold' }, { v: spec.custom ? '' : exampleCode(e), s: 'code' }]),
-  });
 
   const STATUS_TEXT = { ok: '✅ OK', warn: '⚠️ Needs fixes', error: '❌ Broken', missing: '— Not fired' };
   const STATUS_STYLE = { ok: 'ok', warn: 'warn', error: 'error', missing: 'missing' };
@@ -472,11 +463,98 @@
     })));
     report.events.filter((e) => !e.fired).sort((a, b) => (b.core ? 1 : 0) - (a.core ? 1 : 0)).forEach((e) => out.push({
       event: e.name, severity: 'Not fired', param: '—', scope: 'Event', problem: e.core ? 'Core funnel event not seen in this recording.' : 'Not seen in this recording.',
-      fix: `Push ${e.name} when ${ACTION[e.name] || 'the action happens'} (see the "dataLayer code" sheet). If you did not do this step while recording, test it again first.`, page: '', times: 1,
+      fix: `Push ${e.name} when ${ACTION[e.name] || 'the action happens'}. If you did not do this step while recording, test it again first.`, page: '', times: 1,
     }));
     return out;
   }
 
+  // ---------- Parameter Audit matrix ----------
+  const AUDIT_EVENT_ORDER = ['view_promotion', 'select_promotion', 'view_item_list', 'select_item', 'view_item', 'add_to_wishlist', 'add_to_cart', 'remove_from_cart', 'view_cart', 'begin_checkout', 'add_shipping_info', 'add_payment_info', 'purchase', 'refund'];
+  const EVENT_PARAMS = ['currency', 'value', 'transaction_id', 'coupon', 'shipping', 'tax', 'affiliation', 'shipping_tier', 'payment_type', 'item_list_id', 'item_list_name', 'promotion_id', 'promotion_name', 'creative_name', 'creative_slot', 'location_id'];
+  const MATRIX_ITEM_PARAMS = ['item_id', 'item_name', 'item_brand', 'item_category', 'item_category2', 'item_category3', 'item_category4', 'item_category5', 'item_variant', 'price', 'quantity', 'discount', 'index', 'affiliation', 'coupon', 'item_list_id', 'item_list_name', 'location_id', 'promotion_id', 'promotion_name', 'creative_name', 'creative_slot'];
+  const USER_PARAMS = ['user_id', 'email', 'phone_number', 'first_name', 'last_name', 'street', 'city', 'region', 'postal_code', 'country', 'external_id', 'fbp', 'fbc', 'ga_client_id', 'ga_session_id'];
+
+  function paramMatrix(report, session) {
+    const pushes = allPushes(session);
+    const evParam = EVENT_PARAMS.length;
+    const itParam = MATRIX_ITEM_PARAMS.length;
+    const usParam = USER_PARAMS.length;
+    const totalCols = 1 + evParam + itParam + usParam;
+    const fill = (n, s) => Array(n).fill(null).map(() => ({ v: '', s }));
+    const groupHeader = [
+      { v: '', s: 'text' },
+      { v: 'Event-level parameters', s: 'band1' }, ...fill(evParam - 1, 'band1'),
+      { v: 'Item-level parameters (items[])', s: 'band2' }, ...fill(itParam - 1, 'band2'),
+      { v: 'User data / PII (Enhanced Conversions, Meta CAPI, server-side)', s: 'band3' }, ...fill(usParam - 1, 'band3'),
+    ];
+    const header = ['Event', ...EVENT_PARAMS, ...MATRIX_ITEM_PARAMS, ...USER_PARAMS];
+    const rows = AUDIT_EVENT_ORDER.map((evName) => {
+      const push = pushes.find((p) => p.event === evName);
+      const ev = report.events.find((e) => e.name === evName);
+      const P = push ? push.params : {};
+      const items = Array.isArray(P.items) ? P.items : [];
+      const it0 = items[0] && typeof items[0] === 'object' ? items[0] : {};
+      const raw = push ? push.raw : {};
+      const ud = (raw && raw.user_data && typeof raw.user_data === 'object') ? raw.user_data : (P.user_data && typeof P.user_data === 'object' ? P.user_data : {});
+      const showVal = (v) => (v === undefined || v === null ? '' : typeof v === 'object' ? JSON.stringify(v).slice(0, 60) : String(v));
+      const cells = [{ v: evName, s: ev && !ev.fired ? 'missing' : 'bold' }];
+      EVENT_PARAMS.forEach((p) => {
+        const v = P[p];
+        if (v !== undefined && v !== null && v !== '') cells.push(showVal(v));
+        else if (!ev || !ev.fired) cells.push({ v: '', s: 'text' });
+        else {
+          const spec = ev ? EVENTS.find((e) => e.name === evName) : null;
+          const par = spec && spec.params.find((x) => x.name === p);
+          cells.push(par && /^required/i.test(par.req) ? { v: 'MISSING', s: 'error' } : par && /^recommended/i.test(par.req) ? { v: '—', s: 'warn' } : '');
+        }
+      });
+      MATRIX_ITEM_PARAMS.forEach((p) => {
+        const v = it0[p];
+        cells.push(v !== undefined && v !== null && v !== '' ? showVal(v) : '');
+      });
+      USER_PARAMS.forEach((p) => {
+        const v = ud[p] !== undefined ? ud[p] : (raw[p] !== undefined ? raw[p] : undefined);
+        cells.push(v !== undefined && v !== null && v !== '' ? showVal(v) : '');
+      });
+      return cells;
+    });
+    return {
+      name: 'Parameter Audit',
+      groupHeader,
+      groupMerges: [[1, evParam], [1 + evParam, evParam + itParam], [1 + evParam + itParam, evParam + itParam + usParam]],
+      header,
+      widths: [20, ...Array(evParam + itParam + usParam).fill(14)],
+      freezeCol: 1,
+      rows,
+    };
+  }
+
+  // ---------- Fired dataLayer tab ----------
+  function firedPushesSheet(session, site) {
+    const pushes = [];
+    (session.pages || []).forEach((pg) => {
+      (pg.pushes || []).forEach((x) => {
+        const r = readPush(x.data);
+        if (!r) return;
+        if (r.clear) { pushes.push({ event: 'ecommerce: null', page: pg.url, code: 'dataLayer.push({ ecommerce: null });' }); return; }
+        const known = EVENTS.some((e) => e.name === r.event);
+        const hasEcom = r.where === 'ecommerce' || r.where === 'gtag';
+        if (!known && !hasEcom && !r.ua) return;
+        const code = r.where === 'gtag' ? `gtag("event", "${r.event}", ${JSON.stringify(x.data[2] || {}, null, 2)});` : `dataLayer.push(${JSON.stringify(x.data, null, 2)});`;
+        pushes.push({ event: r.event, page: pg.url, code });
+      });
+    });
+    return {
+      name: 'Fired dataLayer',
+      title: `Ecommerce dataLayer pushes · ${site}`,
+      note: 'Every ecommerce event captured during the recording, in the exact format the site sent it.',
+      widths: [5, 22, 40, 110],
+      header: ['#', 'Event', 'Page', 'dataLayer.push() code'],
+      rows: pushes.map((p, i) => ({ cells: [i + 1, { v: p.event, s: p.event === 'ecommerce: null' ? 'muted' : 'bold' }, p.page, { v: p.code, s: 'code' }], ht: Math.max(lineCount(p.code), 2) * 11.5 + 6 })),
+    };
+  }
+
+  // ---------- 3-tab workbook ----------
   function workbook(report, meta = {}) {
     const spec = meta.spec || GA4_STANDARD;
     const session = meta.session || { pages: [] };
@@ -486,67 +564,77 @@
     const shortWrong = (e) => {
       if (!e.fired) return e.core ? 'Not seen: this core event must fire.' : 'Not seen in this recording.';
       const bad = e.rows.filter((r) => r.level === 'error' || r.level === 'warn');
-      if (!bad.length) return 'Matches the standard.';
+      if (!bad.length) return 'All parameters match the standard.';
       const uniq = [...new Set(bad.map((r) => r.comment))];
-      return uniq.slice(0, 3).join(' ') + (uniq.length > 3 ? ` (+${uniq.length - 3} more — see Issues to fix)` : '');
+      return uniq.slice(0, 3).join(' ') + (uniq.length > 3 ? ` (+${uniq.length - 3} more)` : '');
     };
-    const issues = issueRows(report);
-    const codeRows = report.events.map((e) => {
-      const fired = e.fired ? firedCode(session, e.name) : '(not fired on the site)';
-      const good = siteExample(session, e.name, spec);
-      return { cells: [{ v: e.name, s: 'bold' }, { v: STATUS_TEXT[e.status], s: STATUS_STYLE[e.status] }, { v: fired, s: 'code' }, { v: good, s: 'code' }], ht: Math.max(lineCount(fired), lineCount(good)) * 11.5 + 6 };
-    });
+    const STATUS_MAP = { ok: 'Pass', warn: 'Warning', error: 'Fail', missing: 'Not Implemented' };
+    const severityOf = (e) => {
+      if (!e.fired) return 'N/A';
+      const has = (lvl) => e.rows.some((r) => r.level === lvl);
+      if (has('error') && e.rows.some((r) => r.level === 'error' && /required|transaction_id/.test(r.comment))) return 'Critical';
+      if (has('error')) return 'High';
+      if (has('warn')) return 'Medium';
+      if (has('info')) return 'Low';
+      return 'N/A';
+    };
+    const SEV_STYLE = { Critical: 'error', High: 'error', Medium: 'warn', Low: 'info', 'N/A': 'text' };
+    const issueCount = (e) => e.rows.filter((r) => r.level === 'error' || r.level === 'warn').length;
+    const nEvents = report.events.length;
+    const dataStart = 7;
+    const dataEnd = dataStart + nEvents;
     return [
       {
-        name: 'Summary', title: `Ecommerce dataLayer audit · ${site}`,
-        note: `Digital Lens™ · ${when} · ${report.spec} · ${report.source}: ${report.pages} page${report.pages === 1 ? '' : 's'}, ${report.pushes} dataLayer pushes${report.hitsCaptured ? `, ${report.hits} GA4 hits` : ''}`,
-        pre: [
-          [{ v: `Result: ${s.fired} of ${s.expected} events fired  ·  ${s.ok} OK  ·  ${s.warn} need fixes  ·  ${s.error} broken  ·  ${s.missing} not fired`, s: 'bold' }],
-          [{ v: 'Start with the "Issues to fix" sheet. The "dataLayer code" sheet shows what the site sends and the correct code for this website.', s: 'muted' }],
+        name: 'Audit Summary', title: `Ecommerce Audit · ${site}`,
+        note: `Digital Lens™ · ${when} · ${report.spec} · ${s.fired} of ${s.expected} events fired`,
+        pre: [[{ v: `${s.ok} Pass · ${s.warn} Warning · ${s.error} Fail · ${s.missing} Not Implemented`, s: 'bold' }]],
+        widths: [24, 20, 14, 14, 80],
+        header: ['Event Name', 'Status', 'Severity', 'Issues Found', 'Recommendation'],
+        rows: [
+          [{ v: 'EXAMPLE — delete this row', s: 'muted' }, { v: 'Pass', s: 'ok' }, { v: 'N/A', s: 'text' }, 0, { v: 'All parameters match the standard.', s: 'muted' }],
+          ...report.events.map((e) => [
+            { v: e.name, s: 'bold' },
+            { v: STATUS_MAP[e.status], s: STATUS_STYLE[e.status] },
+            { v: severityOf(e), s: SEV_STYLE[severityOf(e)] },
+            issueCount(e),
+            shortWrong(e),
+          ]),
         ],
-        widths: [20, 30, 16, 9, 13, 90],
-        header: ['Event', 'What it tracks', 'Status', 'Times fired', 'Sent to GA4', "What's wrong"],
-        rows: report.events.map((e) => [{ v: e.name, s: 'bold' }, e.label, { v: STATUS_TEXT[e.status], s: STATUS_STYLE[e.status] }, e.fired, report.hitsCaptured ? (e.fired ? (e.hit && e.hit.sent ? `Yes (${e.hit.sent})` : 'No') : '—') : 'Not checked', shortWrong(e)]),
+        validations: [
+          { sqref: `B${dataStart}:B${dataEnd}`, values: ['Pass', 'Warning', 'Fail', 'Not Implemented'] },
+          { sqref: `C${dataStart}:C${dataEnd}`, values: ['Critical', 'High', 'Medium', 'Low', 'N/A'] },
+        ],
       },
-      {
-        name: 'Issues to fix', widths: [5, 18, 11, 20, 50, 60, 36],
-        header: ['#', 'Event', 'Severity', 'Parameter', 'Problem', 'How to fix', 'Page'],
-        rows: issues.map((x, i) => [i + 1, { v: x.event, s: 'bold' }, { v: x.severity, s: x.severity === 'Error' ? 'error' : x.severity === 'Warning' ? 'warn' : 'missing' }, `${x.param}${x.scope === 'Items' ? ' (items)' : ''}`, x.problem + (x.times > 1 ? ` (×${x.times})` : ''), x.fix, x.page]),
-      },
-      {
-        name: 'dataLayer code', widths: [18, 14, 62, 62],
-        header: ['Event', 'Status', 'What the site sends now', `Correct dataLayer for ${site}`],
-        rows: codeRows,
-      },
-      {
-        name: 'All checks', widths: [18, 11, 4, 9, 20, 14, 26, 30, 10, 55, 55, 36],
-        header: ['Event', 'Funnel step', '#', 'Scope', 'Parameter', 'Requirement', 'Standard', 'Fired value', 'Result', 'Comment', 'How to fix', 'Page URL'],
-        rows: sheetRows(report).map((r) => [{ v: r.event, s: 'bold' }, r.step, r.occurrence, r.scope, r.param, r.req, r.expected, r.actual, { v: r.result, s: RESULT_STYLE[r.result] }, r.comment, r.fix || '', r.page]),
-      },
-      { ...STANDARD_SHEET(spec), name: 'GA4 standard' },
+      paramMatrix(report, session),
+      firedPushesSheet(session, site),
     ];
   }
-  // Blank template: how to use it, the standard (editable, re-upload as CSV) and the code.
+
   function templateWorkbook() {
     const spec = GA4_STANDARD;
     return [
       {
         name: 'How to use', title: 'Digital Lens™ · Ecommerce dataLayer audit template', widths: [110], freeze: false, filter: false,
         rows: [
-          ['1. "Standard dataLayer" lists every GA4 ecommerce event and parameter. Edit it for a client (add, remove or change the Requirement), then File → Download → CSV.'],
-          ['2. In Digital Lens → Ecommerce Audit, choose "Custom standard" and upload that CSV. Use Event "*" with Level "Item" for item parameters that apply to every event.'],
-          ['3. Record the site with the Digital Lens Recorder (or paste copy(dataLayer)) and export the report: it fills the Summary and Event audit sheets automatically.'],
-          ['4. "dataLayer code" has the exact push for each event, ready to send to developers.'],
+          ['1. Record the site with the Digital Lens Recorder (or paste copy(dataLayer)) and export the report.'],
+          ['2. The "Audit Summary" sheet shows Pass / Warning / Fail / Not Implemented for each event.'],
+          ['3. The "Parameter Audit" sheet shows which parameters are present or missing for every event.'],
+          ['4. The "Fired dataLayer" sheet has the exact push the site sent for each event.'],
           [''],
           [{ v: 'Requirement values: Required (Error when missing) · Recommended (Warning) · Optional (not flagged).', s: 'muted' }],
         ].map((r) => r.map((v) => (typeof v === 'string' ? { v } : v))),
       },
-      { name: 'Summary', widths: [20, 12, 7, 8, 11, 12, 8, 10, 80], header: ['Event', 'Funnel step', 'Core', 'Fired', 'Status', 'GA4 hit sent', 'Errors', 'Warnings', 'Main finding'], rows: spec.events.map((e) => [{ v: e.name, s: 'bold' }, e.step, CORE.includes(e.name) ? 'Core' : '', '', '', '', '', '', '']) },
-      { name: 'Event audit', widths: [18, 11, 11, 4, 9, 20, 14, 26, 30, 10, 60, 40], header: ['Event', 'Funnel step', 'Event status', '#', 'Scope', 'Parameter', 'Requirement', 'Standard', 'Fired value', 'Result', 'Comment', 'Page URL'], rows: [] },
-      STANDARD_SHEET(spec),
-      CODE_SHEET(spec),
+      {
+        name: 'Audit Summary', widths: [24, 20, 14, 14, 80],
+        header: ['Event Name', 'Status', 'Severity', 'Issues Found', 'Recommendation'],
+        validations: [
+          { sqref: 'B2:B15', values: ['Pass', 'Warning', 'Fail', 'Not Implemented'] },
+          { sqref: 'C2:C15', values: ['Critical', 'High', 'Medium', 'Low', 'N/A'] },
+        ],
+        rows: spec.events.map((e) => [{ v: e.name, s: 'bold' }, '', '', '', '']),
+      },
     ];
   }
 
-  TSD.ecomspec = { issueRows, STATUS_TEXT, siteFacts, siteExample, firedCode, ACTION, workbook, templateWorkbook, standardRows, EVENTS, ITEM_PARAMS, FUNNEL, CORE, GA4_STANDARD, exampleCode, parseInput, normalizeSession, readPush, audit, sheetRows, specFromCsv, parseCsv, LEVEL_TEXT };
+  TSD.ecomspec = { issueRows, STATUS_TEXT, siteFacts, siteExample, firedCode, ACTION, workbook, templateWorkbook, standardRows, EVENTS, ITEM_PARAMS, FUNNEL, CORE, GA4_STANDARD, exampleCode, parseInput, normalizeSession, readPush, audit, sheetRows, specFromCsv, parseCsv, LEVEL_TEXT, AUDIT_EVENT_ORDER, EVENT_PARAMS, MATRIX_ITEM_PARAMS, USER_PARAMS };
 })(typeof globalThis !== 'undefined' ? globalThis : window);
