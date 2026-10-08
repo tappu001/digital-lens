@@ -17,8 +17,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles.css?v=20260928.2">
-  <link rel="stylesheet" href="assets/site.css?v=20260928.2">
+  <link rel="stylesheet" href="assets/styles.css?v=20261008.1">
+  <link rel="stylesheet" href="assets/site.css?v=20261008.1">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
   <!-- Google Tag Manager (noscript) -->
@@ -33,9 +34,17 @@
         <a href="app.html#gtm" data-mode="gtm">GTM Audit</a>
         <a href="app.html#ga4" data-mode="ga4">GA4 Inspector</a>
         <a href="app.html#website" data-mode="website">Website Insights</a>
+        <a href="app.html#ecom" data-mode="ecom">Ecommerce Audit <span class="dl-new">New</span></a>
         <a href="app.html#app" data-mode="app">App Inspector <span class="dl-soon">Soon</span></a>
       </nav>
       <div class="dl-actions">
+        <div class="dl-profile" id="dlProfile" hidden>
+          <button type="button" class="dl-avatar" id="avatarBtn" title="Account" aria-label="Account"><img id="avatarImg" src="" alt=""></button>
+          <div class="dl-profile-menu" id="profileMenu" hidden>
+            <div class="dl-profile-info"><strong id="profileName"></strong><span id="profileEmail"></span></div>
+            <button type="button" class="dl-profile-action" id="signOutBtn">Sign out</button>
+          </div>
+        </div>
         <button type="button" class="dl-icon" id="settingsBtn" title="Settings" aria-label="Settings"></button>
         <button type="button" class="dl-icon dl-burger" aria-label="Menu" aria-expanded="false"><span></span></button>
       </div>
@@ -106,6 +115,12 @@
       </fieldset>
 
       <fieldset class="field">
+        <legend>Google Sheets export</legend>
+        <p class="muted small">Ecommerce Audit can create the report directly as a Google Sheet in your Google Drive. It needs a Google OAuth Client ID (one-time setup, see DEPLOY.md). Digital Lens only asks for access to the files it creates.</p>
+        <input type="text" id="googleClientId" placeholder="1234567890-abc123.apps.googleusercontent.com" spellcheck="false" style="width:100%">
+      </fieldset>
+
+      <fieldset class="field">
         <legend>Display</legend>
         <label class="check"><input type="checkbox" id="showListeners"> Show GTM listener tags and listener-only triggers</label>
       </fieldset>
@@ -125,30 +140,46 @@
 
   <div id="report" class="report" aria-hidden="true"></div>
 
+  <div class="dl-login-gate" id="loginGate" hidden>
+    <div class="dl-login-card">
+      <img src="favicon.svg" alt="" width="48" height="48">
+      <h2>Sign in to Digital Lens</h2>
+      <p>Use your Google account to access all audit tools.</p>
+      <div id="googleSignInBtn"></div>
+    </div>
+  </div>
+
   <div class="dl-footer-wrap"><footer class="dl-footer">
     <div class="fb"><img src="favicon.svg" alt=""><div><strong>Digital Lens™</strong><span>See what matters.</span></div></div>
     <div class="fm">Built by <strong>Tapasvi Dudhrejiya</strong></div>
     <div class="fl"><a href="mailto:dudhrejiyatapasvi@gmail.com">dudhrejiyatapasvi@gmail.com</a><a href="https://www.linkedin.com/in/tapasvi-dudhrejiya/" target="_blank" rel="noopener">LinkedIn ↗</a></div>
   </footer></div>
 
-  <script src="js/config.js?v=20260925.1"></script>
+  <script src="js/config.js?v=20260928.7"></script>
   <script src="js/core/catalog.js?v=20260925.1"></script>
   <script src="js/core/parser.js?v=20260925.1"></script>
   <script src="js/core/naming.js?v=20260925.1"></script>
   <script src="js/core/decoder.js?v=20260925.1"></script>
   <script src="js/core/audit.js?v=20260925.1"></script>
-  <script src="js/core/sitescan.js?v=20260925.1"></script>
+  <script src="js/core/platforms.js?v=20260928.3"></script>
+  <script src="js/core/sitescan.js?v=20260928.3"></script>
   <script src="js/core/snapshots.js?v=20260925.1"></script>
   <script src="js/core/scan.js?v=20260925.1"></script>
   <script src="js/core/gtmexport.js?v=20260925.1"></script>
-  <script src="js/core/inventory.js?v=20260925.1"></script>
+  <script src="js/core/inventory.js?v=20260928.3"></script>
   <script src="js/core/ga4public.js?v=20260925.1"></script>
-  <script src="js/settings.js?v=20260925.1"></script>
+  <script src="js/core/ecomspec.js?v=20260928.7"></script>
+  <script src="js/core/xlsx.js?v=20260928.7"></script>
+  <script src="js/settings.js?v=20260928.7"></script>
   <script src="js/net.js?v=20260925.1"></script>
   <script src="js/icons.js?v=20260925.1"></script>
   <script src="js/analytics.js?v=20260925.1"></script>
   <script src="js/appinspector.js?v=20260928.1"></script>
-  <script src="js/header.js?v=20260928.2"></script>
-  <script src="js/app.js?v=20260928.2"></script>
+  <script src="js/ecomhistory.js?v=20260928.7"></script>
+  <script src="js/gdrive.js?v=20260928.7"></script>
+  <script src="js/ecomaudit.js?v=20260928.7"></script>
+  <script src="js/auth.js?v=20261008.1"></script>
+  <script src="js/header.js?v=20261008.1"></script>
+  <script src="js/app.js?v=20261008.1"></script>
 </body>
 </html>

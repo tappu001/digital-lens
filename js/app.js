@@ -8,7 +8,7 @@
 
   let settings = TSD.settings.get();
   const track = (fn, ...a) => { try { TSD.track && TSD.track[fn] && TSD.track[fn](...a); } catch (e) {} };
-  const state = { ci: 0, view: 'tags', q: '', filter: 'all', sev: 'all', sort: { key: 'name', dir: 1 }, stack: [], lastInput: '', mode: 'home', ga4: { report: null, id: '', input: '', loading: false, error: '', open: {}, choices: null } };
+  const state = { invCat: 'all', ci: 0, view: 'tags', q: '', filter: 'all', sev: 'all', sort: { key: 'name', dir: 1 }, stack: [], lastInput: '', mode: 'home', ga4: { report: null, id: '', input: '', loading: false, error: '', open: {}, choices: null } };
 
   // GTM Audit and Website Insights keep separate results, so switching tabs never mixes them.
   state.results = { gtm: null, website: null };
@@ -96,6 +96,7 @@
       state.results[runSlot] = result;
       if (slot(state.mode) !== runSlot) return;
       state.ci = 0;
+      state.invCat = 'all';
       state.q = '';
       state.filter = 'all';
       state.view = result.containers.length ? 'tags' : 'scan';
@@ -167,6 +168,7 @@
     if (m === 'ga4') return state.ga4.report ? `#ga4?id=${encodeURIComponent(state.ga4.report.measurementId)}` : '#ga4';
     if (m === 'website') return state.inputs.website && state.results.website ? `#website?url=${encodeURIComponent(state.inputs.website)}` : '#website';
     if (m === 'app') return '#app';
+    if (m === 'ecom') return /^#ecom/.test(location.hash) ? location.hash : '#ecom';
     return '#home';
   }
   function syncHash(push) {
@@ -182,7 +184,7 @@
       if (/^(G|GT|AW|DC)-[A-Z0-9]{4,15}$/i.test(v)) { setMode('ga4', true); ga4Load(v); } else { setMode('gtm', true); decode({ input: v }); }
       return;
     }
-    const m = /^#(home|gtm|ga4|website|app)(?:\?(.*))?$/.exec(h);
+    const m = /^#(home|gtm|ga4|website|app|ecom)(?:\?(.*))?$/.exec(h);
     const mode = m ? m[1] : 'home';
     const p = new URLSearchParams(m && m[2] ? m[2] : '');
     setMode(mode, true);
@@ -213,6 +215,7 @@
     if (state.mode === 'app') { if (!render.appMounted) { render.appMounted = true; TSD.appInspector.mount($('#view')); } return; }
     if (render.appMounted) { render.appMounted = false; TSD.appInspector.unmount(); }
     if (state.mode === 'home') { $('#view').innerHTML = viewWorkspace(); return; }
+    if (state.mode === 'ecom') { TSD.ecomAudit.render($('#view')); return; }
     if (state.mode === 'ga4') { $('#view').innerHTML = viewGA4(); bindGA4(); return; }
     if (state.mode === 'website') { $('#view').innerHTML = state.result && state.result.site ? viewWebsiteOnly() : viewWebsiteLanding(); return; }
     if (!c) { $('#view').innerHTML = state.view === 'scan' && state.result ? viewScanOnly() : viewLanding(); return; }
@@ -259,6 +262,7 @@
         <button class="audit-card gtm" data-mode="gtm"><span class="audit-icon">◈</span><span class="audit-title">GTM Audit</span><span class="audit-desc">Open any published container and read its tags, triggers and variables with clean names, plus IDs by platform, weight and load time.</span><span class="audit-cta">Open GTM audit →</span></button>
         <button class="audit-card ga4" data-mode="ga4"><span class="audit-icon">◉</span><span class="audit-title">GA4 Inspector</span><span class="audit-desc">Enter a Measurement ID or website and see its GA4 setup: enhanced measurement, key events, create and modify events, domains, referrals and data collection.</span><span class="audit-cta">Inspect a Measurement ID →</span></button>
         <button class="audit-card app" data-mode="app"><span class="audit-icon">▣</span><span class="audit-title">App Inspector <span class="soon-pill">Coming soon</span></span><span class="audit-desc">Connect an Android phone over USB and watch Firebase / GA4, Meta, Google Ads, TikTok, Snapchat, AppsFlyer and Adjust events fire live, with every parameter.</span><span class="audit-cta">Preview what's coming →</span></button>
+        <button class="audit-card ecom" data-mode="ecom"><span class="audit-icon">⛁</span><span class="audit-title">Ecommerce Audit</span><span class="audit-desc">Record a shop once and check every ecommerce event and parameter against the GA4 standard, with comments and a Google Sheets export.</span><span class="audit-cta">Audit ecommerce →</span></button>
         <button class="audit-card web" data-mode="website"><span class="audit-icon">◌</span><span class="audit-title">Website Insights</span><span class="audit-desc">Scan a live website independently to identify platforms, pixels, analytics IDs, containers, scripts and tracking technologies.</span><span class="audit-cta">Scan a website →</span></button>
       </div>
       <div class="principles"><div><b>Separate tools.</b><span>No mixed dashboards.</span></div><div><b>Readable names.</b><span>Technical IDs stay secondary.</span></div><div><b>Evidence first.</b><span>Private data is marked "Not publicly exposed", never guessed.</span></div></div>
@@ -371,7 +375,17 @@
     });
   }
 
-  function whereBadge(w) { return w === 'On page' ? '<span class="wb page">On page</span>' : `<span class="wb gtm">${esc(w)}</span>`; }
+  function whereBadge(w) {
+    if (w === 'On page') return '<span class="wb page">On page</span>';
+    if (w === 'Shopify app') return '<span class="wb app">Shopify app</span>';
+    return `<span class="wb gtm">${esc(w)}</span>`;
+  }
+  const CAT_COLOR = {
+    'Tag management': '#d36c00', 'Analytics': '#1467f5', 'Product analytics': '#0f8b7d', 'Advertising': '#e5484d', 'Affiliate marketing': '#7b61ff',
+    'Session recording & heatmaps': '#b45309', 'A/B testing': '#0891b2', 'Email & marketing automation': '#db2777', 'Customer data platform': '#4f46e5',
+    'Chat & support': '#059669', 'Consent management': '#16a34a', 'Server-side tagging': '#475569', 'Other': '#80868b',
+  };
+  const catDot = (c) => `<i class="cat-dot" style="background:${CAT_COLOR[c] || '#80868b'}"></i>`;
   function idCode(i) {
     const inspect = /^G-[A-Z0-9]+$/.test(i.id) ? ` data-inspect-ga4="${esc(i.id)}" title="Open in GA4 Inspector" role="button" tabindex="0"` : '';
     return `<span class="idc${inspect ? ' link' : ''}"${inspect}><code>${esc(i.id)}</code><small>${esc(i.where.join(' · '))}</small></span>`;
@@ -382,39 +396,59 @@
     const t = inv.totals;
     const loadTimes = site.gtmLoadMs || {};
     const techs = site.technologies || [];
-    const v = site.gtmVerification || {};
     const consent = (site.gtagCommands || []).filter((c) => c.command === 'consent');
-    const count = (r) => [r.onPage ? `On page ×${r.onPage.count}` : '', ...r.gtm.map((g) => (g.tags ? `${g.containerId}: ${g.tags} tag${g.tags === 1 ? '' : 's'}${g.paused ? ` (${g.paused} paused)` : ''}` : `${g.containerId}: server URL`))].filter(Boolean);
+    const sel = inv.categories.some((c) => c.category === state.invCat) ? state.invCat : 'all';
+    const count = (r) => [
+      r.onPage ? `On page ×${r.onPage.count}` : '',
+      ...r.gtm.map((g) => (g.tags ? `${g.containerId}: ${g.tags} tag${g.tags === 1 ? '' : 's'}${g.paused ? ` (${g.paused} paused)` : ''}` : `${g.containerId}: server URL`)),
+      r.apps.length ? 'Shopify web pixel' : '',
+    ].filter(Boolean);
+    const shown = inv.rows.filter((r) => sel === 'all' || r.category === sel);
     let lastCat = '';
-    const rows = inv.rows.map((r) => {
-      const head = r.category !== lastCat ? `<tr class="cat-row"><td colspan="4">${esc(r.category)}</td></tr>` : '';
+    const rows = shown.map((r) => {
+      const n = inv.categories.find((c) => c.category === r.category);
+      const head = r.category !== lastCat ? `<tr class="cat-row"><td colspan="4">${catDot(r.category)}${esc(r.category)}<span class="cat-n">${n ? n.count : ''}</span></td></tr>` : '';
       lastCat = r.category;
       return `${head}<tr>
         <td><b>${esc(r.name)}</b></td>
         <td class="ids">${r.ids.length ? r.ids.map(idCode).join('') : '<span class="none">No ID exposed</span>'}</td>
-        <td>${r.where.map(whereBadge).join(' ')}</td>
+        <td>${r.where.map(whereBadge).join(' ')}${r.via.length ? `<div class="via">Added by ${esc(r.via.join(', '))}</div>` : ''}</td>
         <td class="cnt">${count(r).map((x) => `<div>${esc(x)}</div>`).join('')}</td>
       </tr>`;
     }).join('');
+    const chips = inv.categories.length > 1 ? `<div class="cat-chips" role="tablist" aria-label="Filter by category">
+        <button type="button" class="cat-chip${sel === 'all' ? ' on' : ''}" data-inv-cat="all">All <b>${t.platforms}</b></button>
+        ${inv.categories.map((c) => `<button type="button" class="cat-chip${sel === c.category ? ' on' : ''}" data-inv-cat="${esc(c.category)}">${catDot(c.category)}${esc(c.category)} <b>${c.count}</b></button>`).join('')}
+      </div>` : '';
+    const sources = inv.sources;
     return `<div class="w-sum">
         <div><span class="lbl">Built with</span><b>${esc(techs.filter((x) => /CMS|Ecommerce|builder/.test(x.category)).map((x) => x.name).join(', ') || site.sitePlatform || 'Unknown')}</b></div>
         <div><span class="lbl">GTM containers</span><b>${site.gtmIds.length ? site.gtmIds.map((id) => `${esc(id)}${loadTimes[id] != null ? ` <small>${loadTimes[id]} ms</small>` : ''}`).join(', ') : 'None found'}</b></div>
         <div><span class="lbl">Platforms</span><b>${t.platforms}</b></div>
-        <div><span class="lbl">On page only</span><b>${t.onPageOnly}</b></div>
-        <div><span class="lbl">Via GTM only</span><b>${t.gtmOnly}</b></div>
-        <div><span class="lbl">On page + GTM</span><b>${t.both}</b></div>
+        <div><span class="lbl">Categories</span><b>${t.categories}</b></div>
+        <div><span class="lbl">With IDs</span><b>${t.withIds}</b></div>
+        <div><span class="lbl">Via plugins / apps</span><b>${t.apps}</b></div>
       </div>
-      <div class="card list-card"><div class="list-head"><div><h2>Platforms on this website</h2><div class="small muted">Where each tool is implemented, how many times, and its IDs</div></div></div>
+      <div class="card list-card"><div class="list-head"><div><h2>Platforms on this website</h2><div class="small muted">Grouped by category: each tool's IDs, where it is implemented, and how many times</div></div></div>
+        ${chips}
         ${inv.rows.length ? `<div class="table-scroll"><table class="grid inv"><thead><tr><th>Platform</th><th>IDs</th><th>Implemented</th><th>Count</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty"><b>No marketing or analytics platforms found</b>The page HTML and its GTM containers did not contain a known platform.</div>'}
       </div>
+      ${sources.length ? `<div class="card"><div class="card-head"><h2>Plugins &amp; apps adding tracking</h2></div><div class="card-body"><ul class="src-list">${sources.map((x) => `<li><div><b>${esc(x.name)}</b><span class="muted small">${esc(x.kind)}${x.kind === 'Shopify app' ? ` · ${x.apps} app pixel${x.apps === 1 ? '' : 's'}, ${x.custom} custom pixel${x.custom === 1 ? '' : 's'}` : ''}</span></div><div>${x.platforms.length ? x.platforms.map((p) => `<span class="chip plain">${esc(p.name)}${p.ids.length ? ` <code>${esc(p.ids.join(', '))}</code>` : ''}</span>`).join(' ') : `<span class="none">Installed. ${x.canAdd && x.canAdd.length ? `Can add ${esc(x.canAdd.join(', '))}; none of them can be traced to it on this page.` : 'No tracking traced to it on this page.'}</span>`}</div></li>`).join('')}</ul></div></div>` : ''}
       <div class="card"><div class="card-head"><h2>Website details</h2></div><div class="card-body"><dl class="kv-list">
         <dt>Technology</dt><dd>${techs.length ? techs.map((x) => `<span class="chip plain">${esc(x.name)} <span class="muted">${esc(x.category)}</span></span>`).join(' ') : '<span class="none">No specific signature found</span>'}</dd>
         <dt>Consent mode</dt><dd>${consent.length ? consent.map((c) => `<div><b>${c.mode === 'default' ? 'Default' : 'Update'}:</b> ${esc(Object.entries(c.params).map(([k, val]) => `${k} ${val && typeof val === 'object' ? 'set at runtime' : val}`).join(', '))}</div>`).join('') : '<span class="none">No gtag(\'consent\') call in the page HTML</span>'}</dd>
         ${(site.unverifiedGtmIds || []).length || (site.ignoredGtmIds || []).length ? `<dt>Not counted</dt><dd>${esc([...(site.unverifiedGtmIds || []).map((x) => `${x} (not a published container)`), ...(site.ignoredGtmIds || []).map((x) => `${x} (placeholder)`)].join(', '))}</dd>` : ''}
       </dl>
-      <p class="small muted" style="margin:12px 0 0">"On page" means the tool is written directly in the website's HTML. GTM means it is a tag inside that published container. Tools added only after the page runs JavaScript (or by Shopify customer events) cannot be seen in the HTML.${v.unverified ? '' : ''}</p>
+      <p class="small muted" style="margin:12px 0 0">"On page" means the tool is written in the website's HTML ("Added by" names the WordPress plugin that writes it). GTM means a tag inside that published container. "Shopify app" means a web pixel installed through a Shopify app or custom pixel. Tools added only after the page runs JavaScript cannot be seen in the HTML.</p>
       </div></div>`;
   }
+
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-inv-cat]');
+    if (!b) return;
+    state.invCat = b.dataset.invCat;
+    render();
+  });
 
   function viewScanOnly() {
     const site = state.result.site;
@@ -816,6 +850,8 @@
     $('#proxyUrl').value = settings.proxyUrl || '';
     $('#proxyUrl').placeholder = (window.TSD_CONFIG && window.TSD_CONFIG.proxyUrl) || 'https://your-worker.your-subdomain.workers.dev';
     $('#showListeners').checked = settings.showListeners;
+    $('#googleClientId').value = settings.googleClientId || '';
+    $('#googleClientId').placeholder = (window.TSD_CONFIG && window.TSD_CONFIG.googleClientId) || '1234567890-abc123.apps.googleusercontent.com';
     $('#proxyResult').textContent = '';
     $('#clearSnaps').textContent = `Clear saved snapshots (${TSD.snapshots.count()})`;
     settingsDialog.showModal();
@@ -844,11 +880,45 @@
       style: (settingsDialog.querySelector('input[name="style"]:checked') || {}).value || 'spy',
       proxyUrl: $('#proxyUrl').value.trim(),
       showListeners: $('#showListeners').checked,
+      googleClientId: $('#googleClientId').value.trim(),
     });
     if (settings.proxyUrl !== prevProxy) refreshBackend();
     render();
     if (!$('#sheet').hidden) renderSheet();
   });
+
+  // ---------- auth ----------
+  function updateAuthUI() {
+    const u = TSD.auth.user();
+    const gate = $('#loginGate');
+    const profile = $('#dlProfile');
+    if (u) {
+      gate.hidden = true;
+      profile.hidden = false;
+      const img = $('#avatarImg');
+      img.src = u.picture || '';
+      img.alt = u.name || u.email;
+      $('#profileName').textContent = u.name || '';
+      $('#profileEmail').textContent = u.email || '';
+    } else {
+      gate.hidden = false;
+      profile.hidden = true;
+      TSD.auth.renderButton($('#googleSignInBtn'));
+    }
+  }
+  TSD.auth.onChange(updateAuthUI);
+  $('#avatarBtn').addEventListener('click', () => {
+    const m = $('#profileMenu');
+    m.hidden = !m.hidden;
+  });
+  document.addEventListener('click', (e) => { if (!e.target.closest('#dlProfile')) $('#profileMenu').hidden = true; });
+  $('#signOutBtn').addEventListener('click', () => { TSD.auth.signOut(); updateAuthUI(); });
+  function initAuth() {
+    TSD.auth.initGoogleSignIn();
+    updateAuthUI();
+    if (!TSD.auth.user()) TSD.auth.prompt();
+  }
+  window.addEventListener('load', initAuth);
 
   // ---------- start ----------
   render();
