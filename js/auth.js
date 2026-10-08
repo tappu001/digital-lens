@@ -4,7 +4,7 @@
   const TSD = (root.TSD = root.TSD || {});
   const KEY = 'dl-auth';
   const CLIENT_ID = '880210897092-sdf57p988vi3be3d8nhjptko1ff3r1lg.apps.googleusercontent.com';
-  let _scriptUrl = '';
+  let _scriptUrl = 'https://script.google.com/macros/s/AKfycbwf71CLCT7nCbt3xELLRUpjiNFQlzfvSaf5nt01ifsvWX33IXu2rJLpioS4CFXMCxZj9g/exec';
   let _user = null;
   let _onChangeCallbacks = [];
 
