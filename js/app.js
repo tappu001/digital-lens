@@ -887,6 +887,39 @@
     if (!$('#sheet').hidden) renderSheet();
   });
 
+  // ---------- auth ----------
+  function updateAuthUI() {
+    const u = TSD.auth.user();
+    const gate = $('#loginGate');
+    const profile = $('#dlProfile');
+    if (u) {
+      gate.hidden = true;
+      profile.hidden = false;
+      const img = $('#avatarImg');
+      img.src = u.picture || '';
+      img.alt = u.name || u.email;
+      $('#profileName').textContent = u.name || '';
+      $('#profileEmail').textContent = u.email || '';
+    } else {
+      gate.hidden = false;
+      profile.hidden = true;
+      TSD.auth.renderButton($('#googleSignInBtn'));
+    }
+  }
+  TSD.auth.onChange(updateAuthUI);
+  $('#avatarBtn').addEventListener('click', () => {
+    const m = $('#profileMenu');
+    m.hidden = !m.hidden;
+  });
+  document.addEventListener('click', (e) => { if (!e.target.closest('#dlProfile')) $('#profileMenu').hidden = true; });
+  $('#signOutBtn').addEventListener('click', () => { TSD.auth.signOut(); updateAuthUI(); });
+  function initAuth() {
+    TSD.auth.initGoogleSignIn();
+    updateAuthUI();
+    if (!TSD.auth.user()) TSD.auth.prompt();
+  }
+  window.addEventListener('load', initAuth);
+
   // ---------- start ----------
   render();
   refreshBackend().then(applyRoute);

@@ -17,8 +17,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles.css?v=20260928.7">
-  <link rel="stylesheet" href="assets/site.css?v=20260928.2">
+  <link rel="stylesheet" href="assets/styles.css?v=20261008.1">
+  <link rel="stylesheet" href="assets/site.css?v=20261008.1">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
   <!-- Google Tag Manager (noscript) -->
@@ -37,6 +38,13 @@
         <a href="app.html#app" data-mode="app">App Inspector <span class="dl-soon">Soon</span></a>
       </nav>
       <div class="dl-actions">
+        <div class="dl-profile" id="dlProfile" hidden>
+          <button type="button" class="dl-avatar" id="avatarBtn" title="Account" aria-label="Account"><img id="avatarImg" src="" alt=""></button>
+          <div class="dl-profile-menu" id="profileMenu" hidden>
+            <div class="dl-profile-info"><strong id="profileName"></strong><span id="profileEmail"></span></div>
+            <button type="button" class="dl-profile-action" id="signOutBtn">Sign out</button>
+          </div>
+        </div>
         <button type="button" class="dl-icon" id="settingsBtn" title="Settings" aria-label="Settings"></button>
         <button type="button" class="dl-icon dl-burger" aria-label="Menu" aria-expanded="false"><span></span></button>
       </div>
@@ -132,6 +140,15 @@
 
   <div id="report" class="report" aria-hidden="true"></div>
 
+  <div class="dl-login-gate" id="loginGate" hidden>
+    <div class="dl-login-card">
+      <img src="favicon.svg" alt="" width="48" height="48">
+      <h2>Sign in to Digital Lens</h2>
+      <p>Use your Google account to access all audit tools.</p>
+      <div id="googleSignInBtn"></div>
+    </div>
+  </div>
+
   <div class="dl-footer-wrap"><footer class="dl-footer">
     <div class="fb"><img src="favicon.svg" alt=""><div><strong>Digital Lens™</strong><span>See what matters.</span></div></div>
     <div class="fm">Built by <strong>Tapasvi Dudhrejiya</strong></div>
@@ -161,7 +178,8 @@
   <script src="js/ecomhistory.js?v=20260928.7"></script>
   <script src="js/gdrive.js?v=20260928.7"></script>
   <script src="js/ecomaudit.js?v=20260928.7"></script>
-  <script src="js/header.js?v=20260928.2"></script>
-  <script src="js/app.js?v=20260928.7"></script>
+  <script src="js/auth.js?v=20261008.1"></script>
+  <script src="js/header.js?v=20261008.1"></script>
+  <script src="js/app.js?v=20261008.1"></script>
 </body>
 </html>
