@@ -5,7 +5,7 @@
   const TSD = (root.TSD = root.TSD || {});
 
   // Cell styles (index into cellXfs)
-  const S = { text: 0, head: 1, ok: 2, warn: 3, error: 4, info: 5, missing: 6, bold: 7, code: 8, title: 9, muted: 10 };
+  const S = { text: 0, head: 1, ok: 2, warn: 3, error: 4, info: 5, missing: 6, bold: 7, code: 8, title: 9, muted: 10, band1: 11, band2: 12, band3: 13 };
   const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <fonts count="6">
@@ -16,7 +16,7 @@
 <font><b/><sz val="14"/><color rgb="FF08152E"/><name val="Arial"/></font>
 <font><sz val="9"/><color rgb="FF5B6A82"/><name val="Arial"/></font>
 </fonts>
-<fills count="8">
+<fills count="11">
 <fill><patternFill patternType="none"/></fill>
 <fill><patternFill patternType="gray125"/></fill>
 <fill><patternFill patternType="solid"><fgColor rgb="FF08152E"/></patternFill></fill>
@@ -25,10 +25,13 @@
 <fill><patternFill patternType="solid"><fgColor rgb="FFFDE0DE"/></patternFill></fill>
 <fill><patternFill patternType="solid"><fgColor rgb="FFE8F0FE"/></patternFill></fill>
 <fill><patternFill patternType="solid"><fgColor rgb="FFEEEEEE"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FF4A90D9"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FF2E8B57"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FF7B68AE"/></patternFill></fill>
 </fills>
 <borders count="2"><border/><border><left style="thin"><color rgb="FFDCE5F2"/></left><right style="thin"><color rgb="FFDCE5F2"/></right><top style="thin"><color rgb="FFDCE5F2"/></top><bottom style="thin"><color rgb="FFDCE5F2"/></bottom></border></borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="11">
+<cellXfs count="14">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="1" applyBorder="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>
 <xf numFmtId="0" fontId="1" fillId="2" borderId="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
 <xf numFmtId="0" fontId="2" fillId="3" borderId="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>
@@ -40,6 +43,9 @@
 <xf numFmtId="0" fontId="3" fillId="0" borderId="1" applyFont="1" applyBorder="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>
 <xf numFmtId="0" fontId="4" fillId="0" borderId="0" applyFont="1"/>
 <xf numFmtId="0" fontId="5" fillId="0" borderId="0" applyFont="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="1" fillId="8" borderId="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="1" fillId="9" borderId="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
+<xf numFmtId="0" fontId="1" fillId="10" borderId="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
 </cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
@@ -71,15 +77,25 @@
     if (sh.note) row([{ v: sh.note, s: 'muted' }]);
     (sh.pre || []).forEach((cells) => row(cells));
     if (sh.title || sh.note || sh.pre) row([]);
+    let groupRow = 0;
+    if (sh.groupHeader) { row(sh.groupHeader, 'text'); groupRow = r; }
     const headRow = r + 1;
     if (sh.header) row(sh.header, 'head');
     (sh.rows || []).forEach((cells) => row(cells));
     const last = colName(Math.max(0, (sh.header || [1]).length - 1));
     const cols = (sh.widths || []).map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('');
-    const pane = sh.header && sh.freeze !== false ? `<sheetViews><sheetView workbookViewId="0"><pane ySplit="${headRow}" topLeftCell="A${headRow + 1}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>` : '<sheetViews><sheetView workbookViewId="0"/></sheetViews>';
+    const xSplit = sh.freezeCol || 0;
+    const topLeft = (xSplit ? colName(xSplit) : 'A') + (headRow + 1);
+    const activePane = xSplit ? 'bottomRight' : 'bottomLeft';
+    const pane = sh.header && sh.freeze !== false ? `<sheetViews><sheetView workbookViewId="0"><pane${xSplit ? ` xSplit="${xSplit}"` : ''} ySplit="${headRow}" topLeftCell="${topLeft}" activePane="${activePane}" state="frozen"/></sheetView></sheetViews>` : '<sheetViews><sheetView workbookViewId="0"/></sheetViews>';
     const filter = sh.header && sh.filter !== false && (sh.rows || []).length ? `<autoFilter ref="A${headRow}:${last}${r}"/>` : '';
+    const mergeRefs = [];
+    if (sh.groupMerges && groupRow) sh.groupMerges.forEach(([s, e]) => mergeRefs.push(`${colName(s)}${groupRow}:${colName(e)}${groupRow}`));
+    (sh.merges || []).forEach((ref) => mergeRefs.push(ref));
+    const merges = mergeRefs.length ? `<mergeCells count="${mergeRefs.length}">${mergeRefs.map((ref) => `<mergeCell ref="${ref}"/>`).join('')}</mergeCells>` : '';
+    const valids = (sh.validations || []).length ? `<dataValidations count="${sh.validations.length}">${sh.validations.map((v) => `<dataValidation type="list" allowBlank="1" sqref="${v.sqref}"><formula1>"${xml(v.values.join(','))}"</formula1></dataValidation>`).join('')}</dataValidations>` : '';
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${pane}${cols ? `<cols>${cols}</cols>` : ''}<sheetData>${lines.join('')}</sheetData>${filter}</worksheet>`;
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${pane}${cols ? `<cols>${cols}</cols>` : ''}<sheetData>${lines.join('')}</sheetData>${filter}${merges}${valids}</worksheet>`;
   }
 
   function files(sheets) {

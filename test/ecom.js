@@ -113,7 +113,20 @@ assert.ok(/dataLayer\.push\(\{ ecommerce: null \}\)/.test(good));
 assert.ok(/"price": "499"/.test(E.firedCode(site, 'view_item')), 'fired code is what the site sent');
 assert.strictEqual(E.siteExample(site, 'select_item').match(/"item_id"/g).length, 1);
 const sheets = E.workbook(report, { site: 'shop.example', session });
-assert.deepStrictEqual(sheets.map((x) => x.name), ['Summary', 'Issues to fix', 'dataLayer code', 'All checks', 'GA4 standard']);
-assert.ok(sheets[2].rows.every((r) => r.ht > 0 && /dataLayer\.push/.test(r.cells[3].v)), 'code sheet rows have heights and correct code');
+assert.deepStrictEqual(sheets.map((x) => x.name), ['Audit Summary', 'Parameter Audit', 'Fired dataLayer']);
+// Tab 1: Audit Summary has status dropdowns and example row
+assert.ok(sheets[0].validations.length === 2, 'Status and Severity dropdowns');
+assert.ok(sheets[0].rows[0][0].v.includes('EXAMPLE'), 'example row at top');
+assert.ok(sheets[0].rows.length === report.events.length + 1, 'one row per event + example');
+assert.ok(sheets[0].rows[1][1].v === 'Pass' || sheets[0].rows[1][1].v === 'Warning' || sheets[0].rows[1][1].v === 'Fail' || sheets[0].rows[1][1].v === 'Not Implemented', 'status values');
+// Tab 2: Parameter Audit matrix has banded group headers and 14 event rows
+assert.ok(sheets[1].groupHeader.length > 0, 'group header row');
+assert.ok(sheets[1].groupMerges.length === 3, 'three banded groups');
+assert.strictEqual(sheets[1].rows.length, 14, '14 event rows in matrix');
+assert.strictEqual(sheets[1].freezeCol, 1, 'event name column frozen');
+assert.ok(sheets[1].header.includes('currency') && sheets[1].header.includes('item_id') && sheets[1].header.includes('email'), 'all param groups in header');
+// Tab 3: Fired dataLayer has code for each push
+assert.ok(sheets[2].rows.length > 0, 'fired pushes present');
+assert.ok(sheets[2].rows.every((r) => r.ht > 0 && /dataLayer\.push|gtag/.test(r.cells[3].v)), 'fired code rows have heights and proper code');
 
 console.log(`All Ecommerce Audit checks passed (${report.events.length} events, ${rows.length} sheet rows, report ${book.length} bytes).`);
