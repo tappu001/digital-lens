@@ -470,41 +470,36 @@
 
   // ---------- Parameter Audit matrix ----------
   const AUDIT_EVENT_ORDER = ['view_promotion', 'select_promotion', 'view_item_list', 'select_item', 'view_item', 'add_to_wishlist', 'add_to_cart', 'remove_from_cart', 'view_cart', 'begin_checkout', 'add_shipping_info', 'add_payment_info', 'purchase', 'refund'];
-  const EVENT_PARAMS = ['currency', 'value', 'transaction_id', 'tax', 'shipping', 'coupon', 'customer_type', 'shipping_tier', 'payment_type', 'item_list_id', 'item_list_name', 'creative_name', 'creative_slot', 'promotion_id', 'promotion_name'];
-  const MATRIX_ITEM_PARAMS = ['item_id', 'item_name', 'affiliation', 'coupon', 'discount', 'index', 'item_brand', 'item_category', 'item_category2', 'item_category3', 'item_category4', 'item_category5', 'item_list_id', 'item_list_name', 'item_variant', 'location_id', 'price', 'google_business_vertical', 'quantity', 'promotion_id', 'promotion_name', 'creative_name', 'creative_slot'];
+  const CORE_EVENT_PARAMS = ['value', 'currency', 'transaction_id'];
+  const MATRIX_ITEM_PARAMS = ['item_id', 'item_name', 'affiliation', 'coupon', 'discount', 'index', 'item_brand', 'item_category', 'item_category2', 'item_category3', 'item_category4', 'item_category5', 'item_list_id', 'item_list_name', 'item_variant', 'price', 'quantity', 'promotion_id', 'promotion_name', 'creative_name', 'creative_slot'];
+  const OTHER_EVENT_PARAMS = ['tax', 'shipping', 'coupon', 'shipping_tier', 'payment_type', 'item_list_id', 'item_list_name', 'creative_name', 'creative_slot', 'promotion_id', 'promotion_name'];
   const USER_PARAMS = ['user_id', 'email', 'phone_number'];
-  const PARAM_APPLICABLE = {
-    currency: null,
-    value: ['view_item', 'add_to_wishlist', 'add_to_cart', 'remove_from_cart', 'view_cart', 'begin_checkout', 'add_shipping_info', 'add_payment_info', 'purchase', 'refund'],
-    transaction_id: ['purchase', 'refund'],
-    tax: ['purchase', 'refund'],
-    shipping: ['purchase', 'refund'],
-    coupon: ['begin_checkout', 'add_shipping_info', 'add_payment_info', 'purchase', 'refund'],
-    customer_type: ['purchase'],
-    shipping_tier: ['add_shipping_info'],
-    payment_type: ['add_payment_info'],
-    item_list_id: ['view_item_list', 'select_item'],
-    item_list_name: ['view_item_list', 'select_item'],
-    creative_name: ['view_promotion', 'select_promotion'],
-    creative_slot: ['view_promotion', 'select_promotion'],
-    promotion_id: ['view_promotion', 'select_promotion'],
-    promotion_name: ['view_promotion', 'select_promotion'],
-  };
+  const EVENT_PARAMS = [...CORE_EVENT_PARAMS, ...OTHER_EVENT_PARAMS];
 
   function paramMatrix(report, session) {
     const pushes = allPushes(session);
-    const evParam = EVENT_PARAMS.length;
-    const itParam = MATRIX_ITEM_PARAMS.length;
-    const usParam = USER_PARAMS.length;
-    const totalCols = 1 + evParam + itParam + usParam;
+    const coreLen = CORE_EVENT_PARAMS.length;
+    const itLen = MATRIX_ITEM_PARAMS.length;
+    const otherLen = OTHER_EVENT_PARAMS.length + USER_PARAMS.length;
     const fill = (n, s) => Array(n).fill(null).map(() => ({ v: '', s }));
     const groupHeader = [
       { v: '', s: 'text' },
-      { v: 'Event-level parameters', s: 'band1' }, ...fill(evParam - 1, 'band1'),
-      { v: 'Item-level parameters (items[])', s: 'band2' }, ...fill(itParam - 1, 'band2'),
-      { v: 'User data / PII (Enhanced Conversions, Meta CAPI, server-side)', s: 'band3' }, ...fill(usParam - 1, 'band3'),
+      { v: 'Event parameters', s: 'band1' }, ...fill(coreLen - 1, 'band1'),
+      { v: 'Item-level parameters (items[])', s: 'band2' }, ...fill(itLen - 1, 'band2'),
+      { v: 'Additional parameters', s: 'band3' }, ...fill(otherLen - 1, 'band3'),
     ];
-    const header = ['Event', ...EVENT_PARAMS, ...MATRIX_ITEM_PARAMS, ...USER_PARAMS];
+    const header = ['Event', ...CORE_EVENT_PARAMS, ...MATRIX_ITEM_PARAMS, ...OTHER_EVENT_PARAMS, ...USER_PARAMS];
+    const addEventParam = (cells, p, P, ev, evName) => {
+      const v = P[p];
+      if (v !== undefined && v !== null && v !== '') cells.push(showVal(v));
+      else if (!ev || !ev.fired) cells.push({ v: '', s: 'text' });
+      else {
+        const spec = EVENTS.find((e) => e.name === evName);
+        const par = spec && spec.params.find((x) => x.name === p);
+        cells.push(par && /^required/i.test(par.req) ? { v: 'MISSING', s: 'error' } : par && /^recommended/i.test(par.req) ? { v: '—', s: 'warn' } : '');
+      }
+    };
+    const showVal = (v) => (v === undefined || v === null ? '' : typeof v === 'object' ? JSON.stringify(v).slice(0, 60) : String(v));
     const rows = AUDIT_EVENT_ORDER.map((evName) => {
       const push = pushes.find((p) => p.event === evName);
       const ev = report.events.find((e) => e.name === evName);
@@ -513,24 +508,13 @@
       const it0 = items[0] && typeof items[0] === 'object' ? items[0] : {};
       const raw = push ? push.raw : {};
       const ud = (raw && raw.user_data && typeof raw.user_data === 'object') ? raw.user_data : (P.user_data && typeof P.user_data === 'object' ? P.user_data : {});
-      const showVal = (v) => (v === undefined || v === null ? '' : typeof v === 'object' ? JSON.stringify(v).slice(0, 60) : String(v));
       const cells = [{ v: evName, s: ev && !ev.fired ? 'missing' : 'bold' }];
-      EVENT_PARAMS.forEach((p) => {
-        const appl = PARAM_APPLICABLE[p];
-        if (appl && !appl.includes(evName)) { cells.push({ v: 'N/A', s: 'na' }); return; }
-        const v = P[p];
-        if (v !== undefined && v !== null && v !== '') cells.push(showVal(v));
-        else if (!ev || !ev.fired) cells.push({ v: '', s: 'text' });
-        else {
-          const spec = ev ? EVENTS.find((e) => e.name === evName) : null;
-          const par = spec && spec.params.find((x) => x.name === p);
-          cells.push(par && /^required/i.test(par.req) ? { v: 'MISSING', s: 'error' } : par && /^recommended/i.test(par.req) ? { v: '—', s: 'warn' } : '');
-        }
-      });
+      CORE_EVENT_PARAMS.forEach((p) => addEventParam(cells, p, P, ev, evName));
       MATRIX_ITEM_PARAMS.forEach((p) => {
         const v = it0[p];
         cells.push(v !== undefined && v !== null && v !== '' ? showVal(v) : '');
       });
+      OTHER_EVENT_PARAMS.forEach((p) => addEventParam(cells, p, P, ev, evName));
       USER_PARAMS.forEach((p) => {
         const v = ud[p] !== undefined ? ud[p] : (raw[p] !== undefined ? raw[p] : undefined);
         cells.push(v !== undefined && v !== null && v !== '' ? showVal(v) : '');
@@ -540,9 +524,9 @@
     return {
       name: 'Parameter Audit',
       groupHeader,
-      groupMerges: [[1, evParam], [1 + evParam, evParam + itParam], [1 + evParam + itParam, evParam + itParam + usParam]],
+      groupMerges: [[1, coreLen], [1 + coreLen, coreLen + itLen], [1 + coreLen + itLen, coreLen + itLen + otherLen]],
       header,
-      widths: [20, ...Array(evParam + itParam + usParam).fill(14)],
+      widths: [20, ...Array(coreLen + itLen + otherLen).fill(14)],
       freezeCol: 1,
       rows,
     };
@@ -655,5 +639,5 @@
     ];
   }
 
-  TSD.ecomspec = { issueRows, STATUS_TEXT, siteFacts, siteExample, firedCode, ACTION, workbook, templateWorkbook, standardRows, EVENTS, ITEM_PARAMS, FUNNEL, CORE, GA4_STANDARD, exampleCode, parseInput, normalizeSession, readPush, audit, sheetRows, specFromCsv, parseCsv, LEVEL_TEXT, AUDIT_EVENT_ORDER, EVENT_PARAMS, MATRIX_ITEM_PARAMS, USER_PARAMS, PARAM_APPLICABLE };
+  TSD.ecomspec = { issueRows, STATUS_TEXT, siteFacts, siteExample, firedCode, ACTION, workbook, templateWorkbook, standardRows, EVENTS, ITEM_PARAMS, FUNNEL, CORE, GA4_STANDARD, exampleCode, parseInput, normalizeSession, readPush, audit, sheetRows, specFromCsv, parseCsv, LEVEL_TEXT, AUDIT_EVENT_ORDER, EVENT_PARAMS, CORE_EVENT_PARAMS, OTHER_EVENT_PARAMS, MATRIX_ITEM_PARAMS, USER_PARAMS };
 })(typeof globalThis !== 'undefined' ? globalThis : window);
