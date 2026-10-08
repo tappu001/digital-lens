@@ -470,9 +470,26 @@
 
   // ---------- Parameter Audit matrix ----------
   const AUDIT_EVENT_ORDER = ['view_promotion', 'select_promotion', 'view_item_list', 'select_item', 'view_item', 'add_to_wishlist', 'add_to_cart', 'remove_from_cart', 'view_cart', 'begin_checkout', 'add_shipping_info', 'add_payment_info', 'purchase', 'refund'];
-  const EVENT_PARAMS = ['currency', 'value', 'transaction_id', 'coupon', 'shipping', 'tax', 'affiliation', 'shipping_tier', 'payment_type', 'item_list_id', 'item_list_name', 'promotion_id', 'promotion_name', 'creative_name', 'creative_slot', 'location_id'];
-  const MATRIX_ITEM_PARAMS = ['item_id', 'item_name', 'item_brand', 'item_category', 'item_category2', 'item_category3', 'item_category4', 'item_category5', 'item_variant', 'price', 'quantity', 'discount', 'index', 'affiliation', 'coupon', 'item_list_id', 'item_list_name', 'location_id', 'promotion_id', 'promotion_name', 'creative_name', 'creative_slot'];
-  const USER_PARAMS = ['user_id', 'email', 'phone_number', 'first_name', 'last_name', 'street', 'city', 'region', 'postal_code', 'country', 'external_id', 'fbp', 'fbc', 'ga_client_id', 'ga_session_id'];
+  const EVENT_PARAMS = ['currency', 'value', 'transaction_id', 'tax', 'shipping', 'coupon', 'customer_type', 'shipping_tier', 'payment_type', 'item_list_id', 'item_list_name', 'creative_name', 'creative_slot', 'promotion_id', 'promotion_name'];
+  const MATRIX_ITEM_PARAMS = ['item_id', 'item_name', 'affiliation', 'coupon', 'discount', 'index', 'item_brand', 'item_category', 'item_category2', 'item_category3', 'item_category4', 'item_category5', 'item_list_id', 'item_list_name', 'item_variant', 'location_id', 'price', 'google_business_vertical', 'quantity', 'promotion_id', 'promotion_name', 'creative_name', 'creative_slot'];
+  const USER_PARAMS = ['user_id', 'email', 'phone_number'];
+  const PARAM_APPLICABLE = {
+    currency: null,
+    value: ['view_item', 'add_to_wishlist', 'add_to_cart', 'remove_from_cart', 'view_cart', 'begin_checkout', 'add_shipping_info', 'add_payment_info', 'purchase', 'refund'],
+    transaction_id: ['purchase', 'refund'],
+    tax: ['purchase', 'refund'],
+    shipping: ['purchase', 'refund'],
+    coupon: ['begin_checkout', 'add_shipping_info', 'add_payment_info', 'purchase', 'refund'],
+    customer_type: ['purchase'],
+    shipping_tier: ['add_shipping_info'],
+    payment_type: ['add_payment_info'],
+    item_list_id: ['view_item_list', 'select_item'],
+    item_list_name: ['view_item_list', 'select_item'],
+    creative_name: ['view_promotion', 'select_promotion'],
+    creative_slot: ['view_promotion', 'select_promotion'],
+    promotion_id: ['view_promotion', 'select_promotion'],
+    promotion_name: ['view_promotion', 'select_promotion'],
+  };
 
   function paramMatrix(report, session) {
     const pushes = allPushes(session);
@@ -499,6 +516,8 @@
       const showVal = (v) => (v === undefined || v === null ? '' : typeof v === 'object' ? JSON.stringify(v).slice(0, 60) : String(v));
       const cells = [{ v: evName, s: ev && !ev.fired ? 'missing' : 'bold' }];
       EVENT_PARAMS.forEach((p) => {
+        const appl = PARAM_APPLICABLE[p];
+        if (appl && !appl.includes(evName)) { cells.push({ v: 'N/A', s: 'na' }); return; }
         const v = P[p];
         if (v !== undefined && v !== null && v !== '') cells.push(showVal(v));
         else if (!ev || !ev.fired) cells.push({ v: '', s: 'text' });
@@ -636,5 +655,5 @@
     ];
   }
 
-  TSD.ecomspec = { issueRows, STATUS_TEXT, siteFacts, siteExample, firedCode, ACTION, workbook, templateWorkbook, standardRows, EVENTS, ITEM_PARAMS, FUNNEL, CORE, GA4_STANDARD, exampleCode, parseInput, normalizeSession, readPush, audit, sheetRows, specFromCsv, parseCsv, LEVEL_TEXT, AUDIT_EVENT_ORDER, EVENT_PARAMS, MATRIX_ITEM_PARAMS, USER_PARAMS };
+  TSD.ecomspec = { issueRows, STATUS_TEXT, siteFacts, siteExample, firedCode, ACTION, workbook, templateWorkbook, standardRows, EVENTS, ITEM_PARAMS, FUNNEL, CORE, GA4_STANDARD, exampleCode, parseInput, normalizeSession, readPush, audit, sheetRows, specFromCsv, parseCsv, LEVEL_TEXT, AUDIT_EVENT_ORDER, EVENT_PARAMS, MATRIX_ITEM_PARAMS, USER_PARAMS, PARAM_APPLICABLE };
 })(typeof globalThis !== 'undefined' ? globalThis : window);
