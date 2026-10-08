@@ -125,6 +125,14 @@ assert.ok(sheets[1].groupMerges.length === 3, 'three banded groups');
 assert.strictEqual(sheets[1].rows.length, 14, '14 event rows in matrix');
 assert.strictEqual(sheets[1].freezeCol, 1, 'event name column frozen');
 assert.ok(sheets[1].header.includes('currency') && sheets[1].header.includes('item_id') && sheets[1].header.includes('email'), 'all param groups in header');
+// N/A cells: transaction_id is N/A for view_item (row index 4 in AUDIT_EVENT_ORDER)
+const viewItemRow = sheets[1].rows[E.AUDIT_EVENT_ORDER.indexOf('view_item')];
+const txIdx = sheets[1].header.indexOf('transaction_id');
+assert.strictEqual(viewItemRow[txIdx].v, 'N/A', 'transaction_id is N/A for view_item');
+assert.strictEqual(viewItemRow[txIdx].s, 'na', 'N/A cell has na style');
+// transaction_id is applicable for purchase
+const purchaseRow = sheets[1].rows[E.AUDIT_EVENT_ORDER.indexOf('purchase')];
+assert.notStrictEqual(purchaseRow[txIdx].v, 'N/A', 'transaction_id is not N/A for purchase');
 // Tab 3: Fired dataLayer has code for each push
 assert.ok(sheets[2].rows.length > 0, 'fired pushes present');
 assert.ok(sheets[2].rows.every((r) => r.ht > 0 && /dataLayer\.push|gtag/.test(r.cells[3].v)), 'fired code rows have heights and proper code');
