@@ -1,3 +1,4 @@
+node_modules/
 suite/.venv/
 __pycache__/
 *.pyc

@@ -948,3 +948,23 @@ body { color: var(--ink); -webkit-font-smoothing: antialiased; }
 @media (max-width: 800px) { .ec-code-grid { grid-template-columns: 1fr; } .ec-issues li, .ec-issues.small li { grid-template-columns: 1fr; gap: 6px; } }
 .ec-site-in { width: 100%; height: 38px; border: 1px solid #dce5f2; border-radius: 10px; padding: 0 12px; margin-bottom: 8px; font-size: 13.5px; background: #f9fbff; }
 .ec-site-in:focus { outline: none; border-color: #9dbff5; background: #fff; }
+
+/* ---------- login gate ---------- */
+.dl-login-gate { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; background: rgba(243, 247, 253, .92); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
+.dl-login-card { text-align: center; max-width: 380px; padding: 48px 40px; background: #fff; border-radius: 20px; box-shadow: 0 8px 40px rgba(8, 21, 46, .1), 0 0 0 1px rgba(203, 216, 235, .5); }
+.dl-login-card img { margin-bottom: 16px; filter: drop-shadow(0 4px 12px rgba(20, 103, 245, .2)); }
+.dl-login-card h2 { margin: 0 0 8px; font: 700 22px/1.2 'Space Grotesk', system-ui, sans-serif; color: #08152e; }
+.dl-login-card p { margin: 0 0 28px; font-size: 14px; color: #5b6a82; line-height: 1.5; }
+#googleSignInBtn { display: flex; justify-content: center; }
+
+/* ---------- profile avatar ---------- */
+.dl-profile { position: relative; }
+.dl-avatar { width: 36px; height: 36px; border-radius: 50%; border: 2px solid transparent; padding: 0; background: none; cursor: pointer; overflow: hidden; transition: border-color .2s; }
+.dl-avatar:hover { border-color: #1467f5; }
+.dl-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.dl-profile-menu { position: absolute; top: calc(100% + 8px); right: 0; min-width: 240px; background: #fff; border-radius: 12px; box-shadow: 0 8px 32px rgba(8, 21, 46, .12), 0 0 0 1px rgba(203, 216, 235, .5); padding: 16px; z-index: 100; }
+.dl-profile-info { margin-bottom: 12px; }
+.dl-profile-info strong { display: block; font-size: 14px; color: #08152e; }
+.dl-profile-info span { font-size: 13px; color: #5b6a82; }
+.dl-profile-action { width: 100%; height: 36px; border: 1px solid #dce5f2; border-radius: 8px; background: #fff; color: #5b6a82; font: 600 13px/1 Inter, system-ui, sans-serif; cursor: pointer; transition: background .2s, color .2s; }
+.dl-profile-action:hover { background: #fce8e6; color: #c5221f; border-color: #f5c6c2; }
