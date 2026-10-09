@@ -39,13 +39,14 @@
 
   function handleCredentialResponse(response) {
     const payload = JSON.parse(atob(response.credential.split('.')[1]));
+    const ONE_YEAR = 365 * 24 * 60 * 60 * 1000;
     const u = {
       email: payload.email,
       firstName: payload.given_name || '',
       lastName: payload.family_name || '',
       name: payload.name || '',
       picture: payload.picture || '',
-      exp: payload.exp * 1000,
+      exp: Date.now() + ONE_YEAR,
     };
     save(u);
     logToSheet(u);

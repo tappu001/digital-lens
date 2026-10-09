@@ -387,7 +387,8 @@
   };
   const catDot = (c) => `<i class="cat-dot" style="background:${CAT_COLOR[c] || '#80868b'}"></i>`;
   function idCode(i) {
-    const inspect = /^G-[A-Z0-9]+$/.test(i.id) ? ` data-inspect-ga4="${esc(i.id)}" title="Open in GA4 Inspector" role="button" tabindex="0"` : '';
+    const inspect = /^G-[A-Z0-9]+$/.test(i.id) ? ` data-inspect-ga4="${esc(i.id)}" title="Open in GA4 Inspector" role="button" tabindex="0"`
+      : /^GTM-[A-Z0-9]+$/.test(i.id) ? ` data-inspect-gtm="${esc(i.id)}" title="Open in GTM Audit" role="button" tabindex="0"` : '';
     return `<span class="idc${inspect ? ' link' : ''}"${inspect}><code>${esc(i.id)}</code><small>${esc(i.where.join(' · '))}</small></span>`;
   }
 
@@ -423,7 +424,7 @@
     const sources = inv.sources;
     return `<div class="w-sum">
         <div><span class="lbl">Built with</span><b>${esc(techs.filter((x) => /CMS|Ecommerce|builder/.test(x.category)).map((x) => x.name).join(', ') || site.sitePlatform || 'Unknown')}</b></div>
-        <div><span class="lbl">GTM containers</span><b>${site.gtmIds.length ? site.gtmIds.map((id) => `${esc(id)}${loadTimes[id] != null ? ` <small>${loadTimes[id]} ms</small>` : ''}`).join(', ') : 'None found'}</b></div>
+        <div><span class="lbl">GTM containers</span><b>${site.gtmIds.length ? site.gtmIds.map((id) => `<span class="idc link" data-inspect-gtm="${esc(id)}" title="Open in GTM Audit" role="button" tabindex="0">${esc(id)}${loadTimes[id] != null ? ` <small>${loadTimes[id]} ms</small>` : ''}</span>`).join(' ') : 'None found'}</b></div>
         <div><span class="lbl">Platforms</span><b>${t.platforms}</b></div>
         <div><span class="lbl">Categories</span><b>${t.categories}</b></div>
         <div><span class="lbl">With IDs</span><b>${t.withIds}</b></div>
@@ -773,6 +774,8 @@
     if (recent) { $('#q').value = recent.dataset.recent; decode({ input: recent.dataset.recent }); return; }
     const inspectGa4 = t.closest('[data-inspect-ga4]');
     if (inspectGa4) { setMode('ga4'); ga4Load(inspectGa4.dataset.inspectGa4); return; }
+    const inspectGtm = t.closest('[data-inspect-gtm]');
+    if (inspectGtm) { setMode('gtm'); decode({ input: inspectGtm.dataset.inspectGtm }); return; }
     // Website Insights has its own scan button because the global header form is hidden in website mode.
     if (t.closest('#websiteQuickBtn')) {
       e.preventDefault();
@@ -803,7 +806,7 @@
   $('#scrim').addEventListener('click', closeSheet);
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && e.target && e.target.id === 'websiteQuick') { e.preventDefault(); const b = $('#websiteQuickBtn'); if (b) b.click(); return; }
-    if (e.key === 'Enter' && e.target && e.target.matches && e.target.matches('[data-inspect-ga4]')) { e.target.click(); return; }
+    if (e.key === 'Enter' && e.target && e.target.matches && (e.target.matches('[data-inspect-ga4]') || e.target.matches('[data-inspect-gtm]'))) { e.target.click(); return; }
     if (e.key === 'Escape' && !$('#sheet').hidden) {
       if (state.stack.length > 1) { state.stack.pop(); renderSheet(); } else closeSheet();
     }
